@@ -20,6 +20,8 @@ function App() {
         },
       );
       toast.success("Seizure logged!");
+      setDuration("");
+      setNotes("");
     } catch (error) {
       toast.error("Failed to submit data.");
       console.error(error);
