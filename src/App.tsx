@@ -31,12 +31,12 @@ function App() {
   };
 
   return (
-    <div className="flex min-h-screen min-w-[500px] items-center justify-center bg-zinc-800 font-normal text-white leading-6 text-opacity-90">
-      <div className="m-0 flex max-w-screen-xl flex-col place-items-center justify-between p-8 text-center">
-        <div className="flex flex-col justify-center">
+    <div className="flex min-h-screen min-w-[300px] items-center justify-center bg-zinc-800 font-normal text-white leading-6 text-opacity-90">
+      <div className="m-0 flex max-w-screen-xl flex-grow flex-col justify-between p-8 text-center">
+        <div className="flex flex-grow flex-col justify-center">
           <div className="mb-4 font-bold text-2xl">Seizure Tracking</div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex min-w-[450px] flex-col text-left">
+            <div className="flex flex-col text-left">
               <label
                 htmlFor="duration"
                 className="block font-medium text-sm text-white"
