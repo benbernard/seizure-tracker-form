@@ -8,8 +8,7 @@ function App() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const submitSeizure = async (duration: string, notes: string) => {
     setLoading(true);
     try {
       await axios.post(
@@ -30,6 +29,11 @@ function App() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    await submitSeizure(duration, notes);
+  };
+
   return (
     <div className="min-h-screen min-w-[300px] bg-zinc-800 font-normal text-white leading-6 text-opacity-90">
       <div className="flex min-h-screen justify-center p-4 pt-10">
@@ -37,8 +41,25 @@ function App() {
           <div className="mb-4 text-center font-bold text-2xl">
             Kat Seizure Tracking
           </div>
+          <div className="mt-4">
+            <div className="mx-auto max-w-md border border-zinc-600 rounded-lg p-4">
+              <div className="flex gap-2 flex-wrap justify-between">
+                {[5, 10, 15, 20].map((seconds) => (
+                  <button
+                    key={seconds}
+                    type="button"
+                    onClick={() => submitSeizure(seconds.toString(), notes)}
+                    disabled={loading}
+                    className="px-4 py-2 bg-green-700 rounded-md hover:bg-green-600 transition-colors disabled:opacity-50"
+                  >
+                    {seconds}s
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-col text-left">
+            <div className="flex mt-4 flex-col text-left">
               <label
                 htmlFor="duration"
                 className="block font-medium text-sm text-white"
