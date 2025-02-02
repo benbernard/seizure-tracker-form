@@ -126,7 +126,7 @@ function App() {
           </form>
         </div>
       </div>
-      <ToastContainer />
+      <ToastContainer position="bottom-center" />
     </div>
   );
 }
