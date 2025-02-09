@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Seizure } from "@/lib/aws/schema";
 import { listSeizures, deleteSeizure } from "../actions";
-import { BarChart3, Trash2 } from "lucide-react";
+import { BarChart3, Trash2, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import { toast } from "react-toastify";
 import { useQueryClient } from "@tanstack/react-query";
@@ -56,7 +56,19 @@ function SeizuresList() {
   return (
     <div className="mt-8">
       <h2 className="text-xl font-semibold mb-4 flex items-center justify-between">
-        <span>Recent Seizures ({seizures.length})</span>
+        <div className="flex items-center gap-4">
+          <span>Recent Seizures ({seizures.length})</span>
+          <a
+            href="https://docs.google.com/spreadsheets/d/1ZJRaU0L8VZgGfOaJ5WvLHyfFVeiHaLq9xPI9qTYKY_M/edit?gid=0#gid=0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 hover:text-blue-400 transition-colors flex items-center gap-1"
+            title="Open Google Sheet"
+          >
+            <FileSpreadsheet className="w-5 h-5" />
+            <span className="text-sm">Tracking Sheet</span>
+          </a>
+        </div>
         <Link
           href="/graphs"
           className="text-blue-500 hover:text-blue-400 transition-colors"
