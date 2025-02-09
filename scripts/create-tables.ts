@@ -5,6 +5,7 @@ import {
   SEIZURES_TABLE,
   SETTINGS_TABLE,
   PATIENTS_TABLE,
+  MEDICATION_CHANGES_TABLE,
 } from "../src/lib/aws/confs";
 
 // Load environment variables from .env.local
@@ -56,6 +57,19 @@ const createPatientsTableCommand = new CreateTableCommand({
   BillingMode: "PAY_PER_REQUEST",
 });
 
+const createMedicationChangesTableCommand = new CreateTableCommand({
+  TableName: MEDICATION_CHANGES_TABLE,
+  KeySchema: [
+    { AttributeName: "id", KeyType: "HASH" }, // Partition key (patientId)
+    { AttributeName: "date", KeyType: "RANGE" }, // Sort key
+  ],
+  AttributeDefinitions: [
+    { AttributeName: "id", AttributeType: "S" },
+    { AttributeName: "date", AttributeType: "N" },
+  ],
+  BillingMode: "PAY_PER_REQUEST",
+});
+
 async function createTableIfNotExists(command: CreateTableCommand) {
   const tableName = command.input.TableName;
   try {
@@ -63,7 +77,7 @@ async function createTableIfNotExists(command: CreateTableCommand) {
     await client.send(command);
     console.log(`${tableName} table created successfully!`);
     return true;
-  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   } catch (error: any) {
     if (
       error?.$metadata?.httpStatusCode === 400 &&
@@ -83,6 +97,7 @@ async function createTables() {
     await createTableIfNotExists(createSeizuresTableCommand);
     await createTableIfNotExists(createSettingsTableCommand);
     await createTableIfNotExists(createPatientsTableCommand);
+    await createTableIfNotExists(createMedicationChangesTableCommand);
 
     console.log("All tables created/verified successfully!");
   } catch (error) {

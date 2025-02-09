@@ -18,5 +18,14 @@ export interface Patient {
   createdAt: number;
 }
 
+export interface MedicationChange {
+  id: string; // patientId
+  date: number; // Unix timestamp
+  medication: string; // Name of the medication
+  dosage: string; // New dosage
+  type: "start" | "stop" | "adjust"; // Type of change
+  notes?: string; // Optional notes about the change
+}
+
 export const SETTINGS_TABLE =
   process.env.DYNAMODB_SETTINGS_TABLE || "seizure-settings";

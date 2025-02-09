@@ -2,40 +2,43 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "./QueryProvider";
+import { PatientProvider } from "./components/PatientContext";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const geist = Geist({
   subsets: ["latin"],
+  variable: "--font-geist",
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
   subsets: ["latin"],
+  variable: "--font-geist-mono",
 });
 
 export const metadata: Metadata = {
   title: "Seizure Tracker",
-  description: "Track and manage seizure information",
+  description: "Track and monitor seizure activity",
   icons: {
-    icon: "/icon.png",
+    icon: "/seizure.svg",
   },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geist.variable} ${geistMono.variable} font-sans bg-zinc-900`}
       >
         <QueryProvider>
-          {children}
-          <ToastContainer position="bottom-right" theme="dark" />
+          <PatientProvider>
+            {children}
+            <ToastContainer position="bottom-right" theme="dark" />
+          </PatientProvider>
         </QueryProvider>
       </body>
     </html>

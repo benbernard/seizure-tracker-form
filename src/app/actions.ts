@@ -9,9 +9,18 @@ import {
   DeleteCommand,
   BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { Seizure, Settings, Patient } from "@/lib/aws/schema";
+import type {
+  Seizure,
+  Settings,
+  Patient,
+  MedicationChange,
+} from "@/lib/aws/schema";
 import { revalidatePath } from "next/cache";
-import { SETTINGS_TABLE, PATIENTS_TABLE } from "@/lib/aws/confs";
+import {
+  SETTINGS_TABLE,
+  PATIENTS_TABLE,
+  MEDICATION_CHANGES_TABLE,
+} from "@/lib/aws/confs";
 import axios from "axios";
 import { parse } from "papaparse";
 
@@ -27,15 +36,28 @@ export async function getSettings() {
     });
 
     const response = await docClient.send(command);
-    return (
-      (response.Item as Settings) || {
-        id: SETTINGS_ID,
-        enableLatenode: false,
-        updatedAt: Date.now() / 1000,
-      }
-    );
+    console.log("BENBEN getSettings response:", response);
+    const settings = (response.Item as Settings) || {
+      id: SETTINGS_ID,
+      enableLatenode: false,
+      currentPatientId: "kat", // Set default patient
+      updatedAt: Date.now() / 1000,
+    };
+
+    // If no patient is selected, use the default
+    if (!settings.currentPatientId) {
+      settings.currentPatientId = "kat";
+      // Save the default setting
+      const updateCommand = new PutCommand({
+        TableName: SETTINGS_TABLE,
+        Item: settings,
+      });
+      await docClient.send(updateCommand);
+    }
+
+    return settings;
   } catch (error) {
-    console.error("Error fetching settings:", error);
+    console.error("BENBEN Error fetching settings:", error);
     throw new Error("Failed to fetch settings");
   }
 }
@@ -460,5 +482,76 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
   } catch (error) {
     console.error("Error processing CSV upload:", error);
     return { error: "Failed to process CSV upload" };
+  }
+}
+
+export async function listMedicationChanges(
+  patientId: string,
+  fromDate?: number,
+) {
+  try {
+    const command = new QueryCommand({
+      TableName: MEDICATION_CHANGES_TABLE,
+      KeyConditionExpression: fromDate
+        ? "id = :patientId AND #date >= :fromDate"
+        : "id = :patientId",
+      ...(fromDate && {
+        ExpressionAttributeNames: {
+          "#date": "date",
+        },
+      }),
+      ExpressionAttributeValues: {
+        ":patientId": patientId,
+        ...(fromDate && { ":fromDate": fromDate }),
+      },
+    });
+
+    console.log(
+      "BENBEN Query command:",
+      JSON.stringify(command.input, null, 2),
+    );
+    const response = await docClient.send(command);
+    return {
+      medicationChanges: (response.Items || []) as MedicationChange[],
+    };
+  } catch (error) {
+    console.error("BENBEN Error listing medication changes:", error);
+    return { error: "Failed to list medication changes" };
+  }
+}
+
+export async function createMedicationChange(
+  medicationChange: MedicationChange,
+) {
+  try {
+    const command = new PutCommand({
+      TableName: MEDICATION_CHANGES_TABLE,
+      Item: medicationChange,
+    });
+
+    await docClient.send(command);
+    return { success: true };
+  } catch (error) {
+    console.error("BENBEN Error creating medication change:", error);
+    return { error: "Failed to create medication change" };
+  }
+}
+
+export async function deleteMedicationChange(patientId: string, date: number) {
+  try {
+    const command = new DeleteCommand({
+      TableName: MEDICATION_CHANGES_TABLE,
+      Key: {
+        id: patientId,
+        date: date,
+      },
+    });
+
+    await docClient.send(command);
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("BENBEN Error deleting medication change:", error);
+    return { error: "Failed to delete medication change" };
   }
 }
