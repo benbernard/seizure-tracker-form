@@ -1,7 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
+function VercelGreeting() {
+  const [greeting, setGreeting] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/hello")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to fetch greeting");
+        }
+        return response.text();
+      })
+      .then((data) => {
+        setGreeting(data);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setIsLoading(false);
+      });
+  }, []);
+
+  if (isLoading) return <p>Loading greeting...</p>;
+  if (error) return <p>Error: {error}</p>;
+
+  return <p className="text-xl font-semibold mt-4">{greeting}</p>;
+}
 
 function App() {
   const [duration, setDuration] = useState("");
@@ -41,6 +70,7 @@ function App() {
           <div className="mb-4 text-center font-bold text-2xl">
             Kat Seizure Tracking From Vercel
           </div>
+          <VercelGreeting />
           <div className="mt-4">
             <div className="mx-auto max-w-md border border-zinc-600 rounded-lg p-4">
               <div className="flex gap-2 flex-wrap justify-between">
