@@ -24,6 +24,7 @@ import {
   listSeizures,
 } from "../actions";
 import { usePatientId } from "../components/PatientContext";
+import html2canvas from "html2canvas";
 
 function LoadingSpinner() {
   return (
@@ -104,6 +105,7 @@ function SeizureChart({
 }) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const expandButtonRef = useRef<HTMLButtonElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   // Sort medication changes by date
   const sortedChanges = [...medicationChanges].sort((a, b) => a.date - b.date);
 
@@ -126,6 +128,26 @@ function SeizureChart({
       }
     }
   });
+
+  const handleDownload = async () => {
+    if (!chartRef.current) return;
+
+    try {
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: "#27272a", // Match the dark theme
+        scale: 2, // Higher quality
+      });
+
+      const link = document.createElement("a");
+      link.download = `${title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      toast.success("Chart downloaded successfully!");
+    } catch (error) {
+      console.error("Error downloading chart:", error);
+      toast.error("Failed to download chart");
+    }
+  };
 
   const chartContent = (
     <ResponsiveContainer width="100%" height="100%">
@@ -189,32 +211,56 @@ function SeizureChart({
       <div className="mt-8 h-[450px] w-full rounded-lg border border-zinc-600 bg-zinc-900/50 p-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button
-            ref={expandButtonRef}
-            onClick={() => {
-              setIsFullScreen(true);
-              expandButtonRef.current?.blur();
-            }}
-            className="text-gray-400 hover:text-gray-300 transition-colors"
-            title="View full screen"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownload}
+              className="text-gray-400 hover:text-gray-300 transition-colors"
+              title="Download chart"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
-              />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+            </button>
+            <button
+              ref={expandButtonRef}
+              onClick={() => {
+                setIsFullScreen(true);
+                expandButtonRef.current?.blur();
+              }}
+              className="text-gray-400 hover:text-gray-300 transition-colors"
+              title="View full screen"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div className="h-[calc(100%-2rem)]">{chartContent}</div>
+        <div ref={chartRef} className="h-[calc(100%-2rem)]">
+          {chartContent}
+        </div>
       </div>
 
       <FullScreenChart
