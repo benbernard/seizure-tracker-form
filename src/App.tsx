@@ -39,7 +39,7 @@ function App() {
       <div className="flex min-h-screen justify-center p-4 pt-10">
         <div className="w-full max-w-[800px]">
           <div className="mb-4 text-center font-bold text-2xl">
-            Kat Seizure Tracking
+            Kat Seizure Tracking From Vercel
           </div>
           <div className="mt-4">
             <div className="mx-auto max-w-md border border-zinc-600 rounded-lg p-4">

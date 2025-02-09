@@ -4,5 +4,9 @@ globs: **/*
 ---
 # Overview
 
-This is a seizure tracking website deployed on AWS Amplify. It help family and
+This is a seizure tracking website deployed on Vercel. It help family and
 caregivers track seizures. Its written with react and typescript.
+
+It is important that this website work in both mobile and desktop web
+
+This is written in vite with tailwind and react.
