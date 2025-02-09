@@ -3,10 +3,11 @@
   "search.exclude": {
     "node_modules": true,
     "dist": true,
-    ".specstory/**": true,
+    ".specstory/**": true
   },
   "files.exclude": {
     "dist": true,
-    ".specstory/**": true,
-  }
+    ".specstory/**": true
+  },
+  "eslint.enable": false
 }

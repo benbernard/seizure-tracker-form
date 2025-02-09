@@ -1,6 +1,3 @@
-import { CreateTableCommand } from "@aws-sdk/client-dynamodb";
-import { SEIZURES_TABLE } from "./dynamodb";
-
 export interface Seizure {
   patient: string;
   date: number; // Unix epoch
@@ -8,15 +5,18 @@ export interface Seizure {
   notes: string;
 }
 
-export const createTableCommand = new CreateTableCommand({
-  TableName: SEIZURES_TABLE,
-  KeySchema: [
-    { AttributeName: "patient", KeyType: "HASH" }, // Partition key
-    { AttributeName: "date", KeyType: "RANGE" }, // Sort key
-  ],
-  AttributeDefinitions: [
-    { AttributeName: "patient", AttributeType: "S" },
-    { AttributeName: "date", AttributeType: "N" },
-  ],
-  BillingMode: "PAY_PER_REQUEST", // On-demand capacity mode
-});
+export interface Settings {
+  id: string;
+  enableLatenode: boolean;
+  currentPatientId?: string;
+  updatedAt: number; // Unix epoch
+}
+
+export interface Patient {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+export const SETTINGS_TABLE =
+  process.env.DYNAMODB_SETTINGS_TABLE || "seizure-settings";

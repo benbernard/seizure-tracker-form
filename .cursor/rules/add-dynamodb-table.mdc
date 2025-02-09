@@ -1,0 +1,113 @@
+---
+description: Instructions for adding a new DynamoDB table to the project
+globs: src/lib/aws/**/*
+---
+# Adding a New DynamoDB Table
+
+This project uses DynamoDB for data storage. Follow these steps to add a new table:
+
+## 1. Define the Schema
+
+Add your table's interface to `src/lib/aws/schema.ts`:
+
+```typescript
+export interface MyNewTable {
+  // Define required fields
+  id: string;  // If this is your partition key
+  // ... other fields
+}
+```
+
+## 2. Add Table Name to Confs
+
+Add your table name to `src/lib/aws/confs.ts`:
+
+```typescript
+// DynamoDB Table Names
+export const MY_NEW_TABLE = "my-new-table";
+```
+
+## 3. Update Create Tables Script
+
+Add your table definition to `scripts/create-tables.ts`:
+
+```typescript
+import { MY_NEW_TABLE } from "@/lib/aws/confs";
+
+const createMyNewTableCommand = new CreateTableCommand({
+  TableName: MY_NEW_TABLE,
+  KeySchema: [
+    { AttributeName: "id", KeyType: "HASH" }, // Partition key
+    // Add sort key if needed:
+    // { AttributeName: "sortKey", KeyType: "RANGE" },
+  ],
+  AttributeDefinitions: [
+    { AttributeName: "id", AttributeType: "S" },
+    // Add other key attributes
+  ],
+  BillingMode: "PAY_PER_REQUEST",
+});
+
+// Add to createTables function:
+await createTableIfNotExists(createMyNewTableCommand);
+```
+
+## 4. Create the Table
+
+Run the create-tables script:
+```bash
+npm run create-tables
+```
+
+## 5. Add Server Actions
+
+Create actions in `src/app/actions.ts` for interacting with your table:
+
+```typescript
+import { MY_NEW_TABLE } from "@/lib/aws/confs";
+
+export async function myNewTableAction() {
+  try {
+    const command = new QueryCommand({
+      TableName: MY_NEW_TABLE,
+      // ... query parameters
+    });
+    
+    const response = await docClient.send(command);
+    return { items: response.Items || [] };
+  } catch (error) {
+    console.error("BENBEN: Error:", error);
+    return { error: "Failed to execute action" };
+  }
+}
+```
+
+## Notes
+
+- Use `PutCommand` for creating/updating items
+- Use `QueryCommand` for querying with partition key
+- Use `GetCommand` for getting a single item
+- Always include error handling
+- Use the `docClient` from `src/lib/aws/dynamodb.ts`
+- Remember to revalidate paths after mutations
+- Add TypeScript types for all data structures
+- Keep table names in `confs.ts` for easy reference and changes
+
+## Common Patterns
+
+### Single Item Tables (like Settings)
+```typescript
+interface SingleItem {
+  id: string;  // Use a constant like "global"
+  // ... other fields
+}
+```
+
+### Time-Series Data (like Seizures)
+```typescript
+interface TimeSeriesItem {
+  id: string;      // Partition key
+  date: number;    // Sort key (Unix timestamp)
+  // ... other fields
+}
+``` 

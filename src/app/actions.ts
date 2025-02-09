@@ -1,9 +1,67 @@
 "use server";
 
 import { docClient, SEIZURES_TABLE } from "@/lib/aws/dynamodb";
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import type { Seizure } from "@/lib/aws/schema";
+import {
+  PutCommand,
+  QueryCommand,
+  GetCommand,
+  ScanCommand,
+} from "@aws-sdk/lib-dynamodb";
+import type { Seizure, Settings, Patient } from "@/lib/aws/schema";
 import { revalidatePath } from "next/cache";
+import { SETTINGS_TABLE, PATIENTS_TABLE } from "@/lib/aws/confs";
+import axios from "axios";
+
+const SETTINGS_ID = "global";
+
+export async function getSettings() {
+  try {
+    const command = new GetCommand({
+      TableName: SETTINGS_TABLE,
+      Key: {
+        id: SETTINGS_ID,
+      },
+    });
+
+    console.log("BENBEN: Fetching settings");
+    const response = await docClient.send(command);
+    return (
+      (response.Item as Settings) || {
+        id: SETTINGS_ID,
+        enableLatenode: false,
+        updatedAt: Date.now() / 1000,
+      }
+    );
+  } catch (error) {
+    console.error("BENBEN: Error fetching settings:", error);
+    throw new Error("Failed to fetch settings");
+  }
+}
+
+export async function updateSettings({
+  enableLatenode,
+}: { enableLatenode: boolean }) {
+  try {
+    const settings: Settings = {
+      id: SETTINGS_ID,
+      enableLatenode,
+      updatedAt: Math.floor(Date.now() / 1000),
+    };
+
+    const command = new PutCommand({
+      TableName: SETTINGS_TABLE,
+      Item: settings,
+    });
+
+    console.log("BENBEN: Updating settings:", settings);
+    await docClient.send(command);
+    revalidatePath("/settings");
+    return { success: true };
+  } catch (error) {
+    console.error("BENBEN: Error updating settings:", error);
+    return { error: "Failed to update settings" };
+  }
+}
 
 export async function listSeizures() {
   try {
@@ -36,14 +94,11 @@ export async function listSeizures() {
 
 export async function submitSeizure(duration: string, notes?: string) {
   try {
-    // Add artificial delay to see loading state
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
     const seizure: Seizure = {
       patient: "kat",
       date: Math.floor(Date.now() / 1000),
       duration: Number(duration),
-      notes: notes ? `WebForm: ${notes.trim()}` : "",
+      notes: notes?.trim() || "WebForm",
     };
 
     console.log("BENBEN: Creating seizure:", seizure);
@@ -55,19 +110,76 @@ export async function submitSeizure(duration: string, notes?: string) {
 
     await docClient.send(command);
 
-    // TODO: Re-enable webhook call when ready
-    // await axios.post(
-    //   "https://webhook.latenode.com/11681/prod/84908c3c-1283-4f18-9ef3-d773bd08ad6e",
-    //   {
-    //     duration,
-    //     notes: `WebForm: ${notes.trim()}`,
-    //   },
-    // );
+    // Check settings and call webhook if enabled
+    const settings = await getSettings();
+    if (settings.enableLatenode) {
+      console.log("BENBEN: Latenode webhook enabled, sending data");
+      await axios.post(
+        "https://webhook.latenode.com/11681/prod/84908c3c-1283-4f18-9ef3-d773bd08ad6e",
+        {
+          duration,
+          notes: `WebForm: ${notes?.trim() || ""}`,
+        },
+      );
+    }
 
     revalidatePath("/");
     return { success: true };
   } catch (error) {
     console.error("BENBEN: Error creating seizure:", error);
     return { error: "Failed to create seizure" };
+  }
+}
+
+export async function createDefaultPatient() {
+  try {
+    const command = new PutCommand({
+      TableName: PATIENTS_TABLE,
+      Item: {
+        id: "kat",
+        name: "Kat",
+        createdAt: Date.now(),
+      } as Patient,
+    });
+
+    await docClient.send(command);
+    console.log("BENBEN: Created default patient");
+  } catch (error) {
+    console.error("BENBEN: Error creating default patient:", error);
+    throw new Error("Failed to create default patient");
+  }
+}
+
+export async function getPatients() {
+  try {
+    const command = new ScanCommand({
+      TableName: PATIENTS_TABLE,
+    });
+
+    const response = await docClient.send(command);
+    return response.Items as Patient[];
+  } catch (error) {
+    console.error("BENBEN: Error getting patients:", error);
+    throw new Error("Failed to get patients");
+  }
+}
+
+export async function updateCurrentPatient(patientId: string) {
+  try {
+    const command = new PutCommand({
+      TableName: SETTINGS_TABLE,
+      Item: {
+        id: "global",
+        enableLatenode: false,
+        currentPatientId: patientId,
+        updatedAt: Date.now(),
+      } as Settings,
+    });
+
+    await docClient.send(command);
+    revalidatePath("/");
+  } catch (error) {
+    console.error("BENBEN: Error updating current patient:", error);
+    throw new Error("Failed to update current patient");
   }
 }

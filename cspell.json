@@ -2,5 +2,5 @@
   "version": "0.2",
   "language": "en",
   "ignorePaths": ["node_modules/**", ".env.local"],
-  "words": ["Toastify"]
+  "words": ["Latenode", "Toastify", "turbopack"]
 }
