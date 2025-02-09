@@ -151,7 +151,7 @@ export default function ClientPage({
             </h1>
             <button
               type="button"
-              className="absolute right-0 top-0 p-2 hover:text-gray-300"
+              className="absolute right-0 -top-1 p-2 hover:text-gray-300"
               onClick={() => router.push("/settings")}
               aria-label="Settings"
             >
