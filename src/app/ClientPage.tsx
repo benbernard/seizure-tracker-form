@@ -143,8 +143,11 @@ export default function ClientPage({
         <div className="w-full max-w-[800px]">
           <div className="relative mb-6">
             <h1 className="text-center text-2xl font-bold">
-              {initialSettings.currentPatientId?.toUpperCase() || "Kat"} Seizure
-              Tracker
+              {(initialSettings.currentPatientId || "kat")
+                .charAt(0)
+                .toUpperCase() +
+                (initialSettings.currentPatientId || "kat").slice(1)}{" "}
+              Seizure Tracker
             </h1>
             <button
               type="button"

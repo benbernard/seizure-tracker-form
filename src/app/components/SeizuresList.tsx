@@ -16,7 +16,9 @@ function SeizuresList() {
   } = useQuery({
     queryKey: ["seizures"],
     queryFn: async () => {
-      const result = await listSeizures();
+      // Get timestamp for 24 hours ago
+      const oneDayAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+      const result = await listSeizures(oneDayAgo);
       if (result.error) {
         throw new Error(result.error);
       }
@@ -69,7 +71,7 @@ function SeizuresList() {
           <table className="min-w-full table-auto border-collapse">
             <thead>
               <tr className="bg-zinc-800">
-                <th className="px-4 py-2 text-left border-b border-zinc-600">
+                <th className="px-4 py-2 text-left border-b border-zinc-600 min-w-[220px] whitespace-nowrap">
                   Time
                 </th>
                 <th className="px-4 py-2 text-left border-b border-zinc-600">
@@ -93,7 +95,7 @@ function SeizuresList() {
                       index % 2 === 0 ? "" : "bg-zinc-700/10"
                     }`}
                   >
-                    <td className="px-4 py-3 text-sm">
+                    <td className="px-4 py-3 text-sm min-w-[220px] whitespace-nowrap">
                       {dateStr} {timeStr}
                     </td>
                     <td className="px-4 py-3">
