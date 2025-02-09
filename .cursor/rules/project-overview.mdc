@@ -1,0 +1,8 @@
+---
+description: Description and overview of the entire project
+globs: **/*
+---
+# Overview
+
+This is a seizure tracking website deployed on AWS Amplify. It help family and
+caregivers track seizures. Its written with react and typescript.
