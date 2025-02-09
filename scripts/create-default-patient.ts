@@ -16,15 +16,11 @@ if (
 
 // Import after environment variables are loaded
 import { createDefaultPatient } from "@/app/actions";
+import { runScript } from "./utils";
 
 async function main() {
-  try {
-    await createDefaultPatient();
-    console.log("Default patient 'Kat' created successfully");
-  } catch (error) {
-    console.error("Error creating default patient:", error);
-    process.exit(1);
-  }
+  await createDefaultPatient();
+  console.log("Default patient 'Kat' created successfully");
 }
 
-main();
+runScript("Create Default Patient", main);
