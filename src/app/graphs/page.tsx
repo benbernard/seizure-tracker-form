@@ -44,10 +44,10 @@ function FullScreenChart({
   children: React.ReactNode;
   title: string;
 }) {
-  if (!isOpen) return null;
-
   // Add event listener for Escape key
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
@@ -56,7 +56,9 @@ function FullScreenChart({
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
