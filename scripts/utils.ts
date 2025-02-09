@@ -1,7 +1,7 @@
-import { config } from "dotenv";
 import { resolve } from "node:path";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { config } from "dotenv";
 
 /**
  * Loads environment variables from .env.local

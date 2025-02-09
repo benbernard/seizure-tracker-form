@@ -1,29 +1,29 @@
 "use client";
 
+import type { MedicationChange, Seizure } from "@/lib/aws/schema";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "react-toastify";
 import {
-  listSeizures,
-  listMedicationChanges,
-  getSettings,
-  createMedicationChange,
-  deleteMedicationChange,
-} from "../actions";
-import {
-  LineChart,
+  CartesianGrid,
   Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
-import type { Seizure, MedicationChange } from "@/lib/aws/schema";
+import {
+  createMedicationChange,
+  deleteMedicationChange,
+  getSettings,
+  listMedicationChanges,
+  listSeizures,
+} from "../actions";
 import { usePatientId } from "../components/PatientContext";
-import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
-import { toast } from "react-toastify";
-import { useQueryClient } from "@tanstack/react-query";
 
 function LoadingSpinner() {
   return (

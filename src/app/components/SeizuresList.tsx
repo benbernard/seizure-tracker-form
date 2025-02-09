@@ -1,12 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import type { Seizure } from "@/lib/aws/schema";
-import { listSeizures, deleteSeizure } from "../actions";
-import { BarChart3, Trash2, FileSpreadsheet } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { BarChart3, FileSpreadsheet, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "react-toastify";
-import { useQueryClient } from "@tanstack/react-query";
+import { deleteSeizure, listSeizures } from "../actions";
 
 function SeizuresList() {
   const queryClient = useQueryClient();

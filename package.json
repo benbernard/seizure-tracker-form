@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "biome check .",
+    "format": "biome format . --write",
     "create-tables": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-tables.ts",
     "create-default-patient": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-default-patient.ts",
     "import-medication-changes": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/import-medication-changes.ts"
@@ -28,13 +29,11 @@
     "swr": "^2.3.2"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
+    "@biomejs/biome": "^1.9.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^16.4.7",
-    "eslint": "^9",
-    "eslint-config-next": "15.1.6",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "ts-node": "^10.9.2",

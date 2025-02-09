@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getSettings } from "../actions";
 import type { Settings } from "@/lib/aws/schema";
+import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, createContext, useContext } from "react";
+import { getSettings } from "../actions";
 
 const PatientContext = createContext<string | undefined>(undefined);
 

@@ -33,9 +33,7 @@
   },
   "overrides": [
     {
-      "include": [
-        "./tsconfig.json"
-      ],
+      "include": ["./tsconfig.json"],
       "json": {
         "parser": {
           "allowComments": true

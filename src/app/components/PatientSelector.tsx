@@ -1,10 +1,10 @@
 "use client";
 
 import type { Patient, Settings } from "@/lib/aws/schema";
-import { useEffect, useState } from "react";
-import { getPatients, updateCurrentPatient } from "../actions";
-import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
+import { getPatients, updateCurrentPatient } from "../actions";
 
 export default function PatientSelector({ settings }: { settings: Settings }) {
   const [patients, setPatients] = useState<Patient[]>([]);

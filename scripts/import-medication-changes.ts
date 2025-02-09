@@ -1,7 +1,7 @@
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
-import type { MedicationChange } from "@/lib/aws/schema";
 import { MEDICATION_CHANGES_TABLE } from "@/lib/aws/confs";
-import { runScript, createDynamoClient } from "./utils";
+import type { MedicationChange } from "@/lib/aws/schema";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { createDynamoClient, runScript } from "./utils";
 
 const medicationChanges = [
   { date: "2024-09-19", medication: "Pheno", dosage: "1.5 tabs" },

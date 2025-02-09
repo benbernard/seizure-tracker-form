@@ -1,27 +1,27 @@
 "use server";
 
-import { docClient, SEIZURES_TABLE } from "@/lib/aws/dynamodb";
 import {
-  PutCommand,
-  QueryCommand,
-  GetCommand,
-  ScanCommand,
-  DeleteCommand,
-  BatchWriteCommand,
-} from "@aws-sdk/lib-dynamodb";
+  MEDICATION_CHANGES_TABLE,
+  PATIENTS_TABLE,
+  SETTINGS_TABLE,
+} from "@/lib/aws/confs";
+import { SEIZURES_TABLE, docClient } from "@/lib/aws/dynamodb";
 import type {
+  MedicationChange,
+  Patient,
   Seizure,
   Settings,
-  Patient,
-  MedicationChange,
 } from "@/lib/aws/schema";
-import { revalidatePath } from "next/cache";
 import {
-  SETTINGS_TABLE,
-  PATIENTS_TABLE,
-  MEDICATION_CHANGES_TABLE,
-} from "@/lib/aws/confs";
+  BatchWriteCommand,
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+} from "@aws-sdk/lib-dynamodb";
 import axios from "axios";
+import { revalidatePath } from "next/cache";
 import { parse } from "papaparse";
 
 const SETTINGS_ID = "global";

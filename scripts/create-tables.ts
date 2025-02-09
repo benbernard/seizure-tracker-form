@@ -1,11 +1,11 @@
 import { CreateTableCommand } from "@aws-sdk/client-dynamodb";
 import {
+  MEDICATION_CHANGES_TABLE,
+  PATIENTS_TABLE,
   SEIZURES_TABLE,
   SETTINGS_TABLE,
-  PATIENTS_TABLE,
-  MEDICATION_CHANGES_TABLE,
 } from "../src/lib/aws/confs";
-import { runScript, createDynamoClient } from "./utils";
+import { createDynamoClient, runScript } from "./utils";
 
 const createSeizuresTableCommand = new CreateTableCommand({
   TableName: SEIZURES_TABLE,

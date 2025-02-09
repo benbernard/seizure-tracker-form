@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { toast } from "react-toastify";
 import {
+  deleteAllSeizures,
   getSettings,
   updateSettings,
-  deleteAllSeizures,
   uploadSeizuresFromCSV,
 } from "../actions";
-import { toast } from "react-toastify";
-import { useRouter } from "next/navigation";
 import PatientSelector from "../components/PatientSelector";
 
 export default function ClientSettings() {
