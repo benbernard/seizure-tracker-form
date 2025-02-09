@@ -13,6 +13,7 @@ import type { Seizure, Settings, Patient } from "@/lib/aws/schema";
 import { revalidatePath } from "next/cache";
 import { SETTINGS_TABLE, PATIENTS_TABLE } from "@/lib/aws/confs";
 import axios from "axios";
+import { parse } from "papaparse";
 
 const SETTINGS_ID = "global";
 
@@ -193,21 +194,56 @@ export async function deleteAllSeizures() {
 
     const response = await docClient.send(command);
     const items = response.Items || [];
+    console.log(`Starting deletion of ${items.length} seizures...`);
 
-    // Delete each item
-    for (const item of items) {
-      const deleteCommand = new DeleteCommand({
-        TableName: SEIZURES_TABLE,
-        Key: {
-          patient: item.patient,
-          date: item.date,
-        },
-      });
-      await docClient.send(deleteCommand);
+    // Process items in batches of 25 (DynamoDB BatchWrite limit)
+    const BATCH_SIZE = 25;
+    const batches = [];
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      batches.push(items.slice(i, i + BATCH_SIZE));
     }
 
+    let deletedCount = 0;
+    for (const batch of batches) {
+      try {
+        const batchCommand = new BatchWriteCommand({
+          RequestItems: {
+            [SEIZURES_TABLE]: batch.map((item) => ({
+              DeleteRequest: {
+                Key: {
+                  patient: item.patient,
+                  date: item.date,
+                },
+              },
+            })),
+          },
+        });
+
+        const result = await docClient.send(batchCommand);
+
+        // Handle unprocessed items
+        if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
+          console.error(
+            "Error: Some items were not processed:",
+            result.UnprocessedItems[SEIZURES_TABLE],
+          );
+        } else {
+          deletedCount += batch.length;
+          if (deletedCount % 500 === 0 || deletedCount === items.length) {
+            console.log(
+              `Deleted ${deletedCount} of ${items.length} seizures...`,
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error processing delete batch:", error);
+        throw error;
+      }
+    }
+
+    console.log(`Deletion complete. ${deletedCount} seizures deleted.`);
     revalidatePath("/");
-    return { success: true, count: items.length };
+    return { success: true, count: deletedCount };
   } catch (error) {
     console.error("Error deleting seizures:", error);
     return { error: "Failed to delete seizures" };
@@ -216,41 +252,116 @@ export async function deleteAllSeizures() {
 
 export async function uploadSeizuresFromCSV(csvContent: string) {
   try {
-    const lines = csvContent.split("\n");
+    const { data, errors } = parse<[string, string, string]>(csvContent, {
+      skipEmptyLines: true,
+      header: false,
+      // Keep raw values to handle dates properly
+      transform: (value) => value.trim(),
+    });
+
     // Skip header row
-    const dataRows = lines.slice(1).filter((line) => line.trim());
+    const dataRows = data.slice(1);
+    console.log(`Starting processing of ${dataRows.length} rows...`);
     const failedRows: string[] = [];
     let successCount = 0;
+
+    // Log any parsing errors
+    if (errors.length > 0) {
+      console.error("CSV parsing errors:", errors);
+      for (const error of errors) {
+        failedRows.push(
+          `CSV parsing error on row ${error.row}: ${error.message}`,
+        );
+      }
+    }
+
+    // First, parse all rows and group by minute
+    interface ParsedRow {
+      originalRow: string[];
+      date: Date;
+      duration: number;
+      notes: string;
+    }
+
+    const parsedRows: ParsedRow[] = [];
+    for (const row of dataRows) {
+      try {
+        const [timeStr, durationStr, notes] = row;
+
+        // Parse the date string to Date object
+        const date = new Date(timeStr);
+        if (Number.isNaN(date.getTime())) {
+          console.error(
+            `Failed to parse date: "${timeStr}" from row: ${row.join(",")}`,
+          );
+          failedRows.push(`Invalid date format (${timeStr}): ${row.join(",")}`);
+          continue;
+        }
+
+        // Handle empty duration
+        if (!durationStr?.trim()) {
+          console.error(`Empty duration in row: ${row.join(",")}`);
+          failedRows.push(`Empty duration: ${row.join(",")}`);
+          continue;
+        }
+
+        const duration = Number.parseInt(durationStr, 10);
+        if (Number.isNaN(duration)) {
+          console.error(
+            `Failed to parse duration: "${durationStr}" from row: ${row.join(",")}`,
+          );
+          failedRows.push(
+            `Invalid duration (${durationStr}): ${row.join(",")}`,
+          );
+          continue;
+        }
+
+        parsedRows.push({
+          originalRow: row,
+          date,
+          duration,
+          notes: notes?.trim() || "CSV Import",
+        });
+      } catch (error) {
+        console.error(`Error processing CSV row: ${row.join(",")}`, error);
+        failedRows.push(
+          `Failed to process row (${error instanceof Error ? error.message : "Unknown error"}): ${row.join(",")}`,
+        );
+      }
+    }
+
+    // Sort rows by date
+    parsedRows.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Group by minute and add seconds
+    const minuteGroups = new Map<string, ParsedRow[]>();
+    for (const row of parsedRows) {
+      const minuteKey = row.date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+      if (!minuteGroups.has(minuteKey)) {
+        minuteGroups.set(minuteKey, []);
+      }
+      const group = minuteGroups.get(minuteKey);
+      if (group) {
+        group.push(row);
+      }
+    }
 
     // Process rows in batches of 25 (DynamoDB BatchWrite limit)
     const BATCH_SIZE = 25;
     const batches: Seizure[][] = [];
     const currentBatch: Seizure[] = [];
 
-    for (const row of dataRows) {
-      try {
-        const [timeStr, durationStr, notes] = row
-          .split(",")
-          .map((field) => field.trim());
-
-        // Parse the date string to Unix timestamp
-        const date = new Date(timeStr);
-        if (Number.isNaN(date.getTime())) {
-          failedRows.push(`Invalid date format: ${row}`);
-          continue;
-        }
-
-        const duration = Number.parseInt(durationStr, 10);
-        if (Number.isNaN(duration)) {
-          failedRows.push(`Invalid duration: ${row}`);
-          continue;
-        }
+    // Create seizures with adjusted seconds
+    for (const [, rows] of minuteGroups) {
+      rows.forEach((row, index) => {
+        const adjustedDate = new Date(row.date);
+        adjustedDate.setSeconds(index); // Add sequential seconds
 
         const seizure: Seizure = {
-          patient: "kat", // TODO: Use currentPatientId from settings
-          date: Math.floor(date.getTime() / 1000),
-          duration,
-          notes: notes?.replace(/^"(.*)"$/, "$1") || "CSV Import",
+          patient: "kat",
+          date: Math.floor(adjustedDate.getTime() / 1000),
+          duration: row.duration,
+          notes: row.notes,
         };
 
         currentBatch.push(seizure);
@@ -260,10 +371,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
           batches.push([...currentBatch]);
           currentBatch.length = 0;
         }
-      } catch (error) {
-        console.error("Error processing CSV row:", row, error);
-        failedRows.push(row);
-      }
+      });
     }
 
     // Don't forget the last partial batch
@@ -289,23 +397,55 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
         // Handle unprocessed items
         if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
           console.error(
-            "Error: Some items were not processed:",
-            result.UnprocessedItems[SEIZURES_TABLE],
+            "Error: Some items were not processed by DynamoDB:",
+            JSON.stringify(result.UnprocessedItems[SEIZURES_TABLE], null, 2),
           );
           // Add unprocessed items to failedRows
           for (const item of result.UnprocessedItems[SEIZURES_TABLE]) {
             if (item.PutRequest?.Item) {
-              failedRows.push(JSON.stringify(item.PutRequest.Item));
+              const seizure = item.PutRequest.Item;
+              const date = new Date(seizure.date * 1000).toISOString();
+              failedRows.push(
+                `DynamoDB failed to process: date=${date}, duration=${seizure.duration}, notes=${seizure.notes}. Reason: ${JSON.stringify(item)}`,
+              );
             }
           }
         } else {
           successCount += batch.length;
+          if (successCount % 500 === 0 || successCount === dataRows.length) {
+            console.log(
+              `Processed ${successCount} of ${dataRows.length} rows...`,
+            );
+          }
         }
       } catch (error) {
-        console.error("Error processing batch:", error);
-        // Add all items in the failed batch to failedRows
+        console.error("Error processing batch in DynamoDB:", error);
+        if (error instanceof Error) {
+          console.error("DynamoDB Error details:", {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            // @ts-ignore - DynamoDB errors often have a code property
+            code: error.code,
+            // @ts-ignore - DynamoDB errors often have a statusCode property
+            statusCode: error.statusCode,
+            // @ts-ignore - Capture any additional properties
+            details: error,
+          });
+        }
+        // Add all items in the failed batch to failedRows with more context
         for (const seizure of batch) {
-          failedRows.push(JSON.stringify(seizure));
+          const date = new Date(seizure.date * 1000).toISOString();
+          const errorDetails =
+            error instanceof Error
+              ? `${error.name}: ${error.message}${
+                  // @ts-ignore - DynamoDB errors often have these properties
+                  error.code ? ` (Code: ${error.code})` : ""
+                }`
+              : "Unknown error";
+          failedRows.push(
+            `DynamoDB batch error (${errorDetails}): date=${date}, duration=${seizure.duration}, notes=${seizure.notes}`,
+          );
         }
       }
     }

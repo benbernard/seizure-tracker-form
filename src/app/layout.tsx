@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Seizure Tracker",
   description: "Track and manage seizure information",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export default function RootLayout({

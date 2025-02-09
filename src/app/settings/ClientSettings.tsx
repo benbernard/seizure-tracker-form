@@ -221,11 +221,10 @@ export default function ClientSettings() {
                 type="button"
                 onClick={handleDeleteAll}
                 disabled={isDeleting}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-75 disabled:cursor-not-allowed min-w-[140px] justify-center"
               >
                 {isDeleting ? (
-                  // biome-ignore lint/a11y/useSemanticElements: <explanation>
-                  <span role="status">
+                  <>
                     <svg
                       className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
                       xmlns="http://www.w3.org/2000/svg"
@@ -248,7 +247,7 @@ export default function ClientSettings() {
                       />
                     </svg>
                     Deleting...
-                  </span>
+                  </>
                 ) : (
                   "Delete All Records"
                 )}
