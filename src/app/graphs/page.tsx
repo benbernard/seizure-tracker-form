@@ -430,9 +430,13 @@ function formatDate(timestamp: number) {
   return new Date(timestamp * 1000).toISOString().split("T")[0];
 }
 
-function MedicationChangesList({ changes }: { changes: MedicationChange[] }) {
+function MedicationChangesList({
+  changes,
+  patientId,
+}: { changes: MedicationChange[]; patientId: string }) {
   const sortedChanges = [...changes].sort((a, b) => b.date - a.date);
   const queryClient = useQueryClient();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleDelete = async (change: MedicationChange) => {
     if (
@@ -454,7 +458,15 @@ function MedicationChangesList({ changes }: { changes: MedicationChange[] }) {
 
   return (
     <div className="mt-8 rounded-lg border border-zinc-600 bg-zinc-900/50 p-4">
-      <h2 className="text-lg font-semibold mb-4">Medication Changes</h2>
+      <div className="flex justify-between items-center mb-10">
+        <h2 className="text-lg font-semibold">Medication Changes</h2>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors flex items-center gap-2"
+        >
+          <span>Add Medication Change</span>
+        </button>
+      </div>
       {sortedChanges.length === 0 ? (
         <p className="text-gray-400">No medication changes recorded.</p>
       ) : (
@@ -471,7 +483,7 @@ function MedicationChangesList({ changes }: { changes: MedicationChange[] }) {
                     {change.type.charAt(0).toUpperCase() + change.type.slice(1)}{" "}
                     - {change.dosage}
                   </p>
-                  {change.notes && (
+                  {change.notes && change.notes !== "Bulk import" && (
                     <p className="text-sm text-gray-400 mt-1">{change.notes}</p>
                   )}
                 </div>
@@ -503,6 +515,12 @@ function MedicationChangesList({ changes }: { changes: MedicationChange[] }) {
           ))}
         </div>
       )}
+
+      <MedicationChangeModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        patientId={patientId}
+      />
     </div>
   );
 }
@@ -630,17 +648,11 @@ function GraphsContent() {
     <div className="min-h-screen bg-zinc-800 text-white">
       <div className="flex justify-center p-4">
         <div className="w-full max-w-[800px]">
-          <h1 className="text-2xl font-bold mb-2">Seizure Frequency</h1>
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-gray-400">
+          <h1 className="text-2xl font-bold mb-4">Seizure Frequency</h1>
+          <div className="flex justify-between items-center mb-8">
+            <p className="text-gray-400 text-lg">
               Tracking seizure occurrences over time with medication changes
             </p>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors flex items-center gap-2"
-            >
-              <span>Add Medication Change</span>
-            </button>
           </div>
 
           <SeizureChart
@@ -674,11 +686,8 @@ function GraphsContent() {
             />
           )}
 
-          <MedicationChangesList changes={medicationChanges} />
-
-          <MedicationChangeModal
-            isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
+          <MedicationChangesList
+            changes={medicationChanges}
             patientId={patientId}
           />
         </div>
