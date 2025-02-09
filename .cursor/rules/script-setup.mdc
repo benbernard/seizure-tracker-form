@@ -136,7 +136,6 @@ Make sure these are in your `package.json`:
 - Follow the existing patterns in the project
 - Add proper logging for debugging
 - Document script purpose and usage
-- Use the `BENBEN` prefix for debug log lines
 
 ## Common Patterns
 
@@ -153,7 +152,7 @@ config({ path: resolve(__dirname, "../.env.local") });
 try {
   // Your code
 } catch (error) {
-  console.error("BENBEN Error:", error);
+  console.error("Error:", error);
   process.exit(1);
 }
 ```

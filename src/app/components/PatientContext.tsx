@@ -16,13 +16,9 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     queryKey: ["settings"],
     queryFn: async () => {
       const result = await getSettings();
-      console.log("BENBEN Settings result:", result);
       return result as Settings;
     },
   });
-
-  console.log("BENBEN Current settings:", settings);
-  console.log("BENBEN Current patientId:", settings?.currentPatientId);
 
   return (
     <PatientContext.Provider value={settings?.currentPatientId}>
@@ -33,6 +29,5 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
 export function usePatientId() {
   const patientId = useContext(PatientContext);
-  console.log("BENBEN usePatientId called, value:", patientId);
   return patientId;
 }

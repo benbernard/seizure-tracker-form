@@ -36,7 +36,6 @@ export async function getSettings() {
     });
 
     const response = await docClient.send(command);
-    console.log("BENBEN getSettings response:", response);
     const settings = (response.Item as Settings) || {
       id: SETTINGS_ID,
       enableLatenode: false,
@@ -57,7 +56,7 @@ export async function getSettings() {
 
     return settings;
   } catch (error) {
-    console.error("BENBEN Error fetching settings:", error);
+    console.error("Error fetching settings:", error);
     throw new Error("Failed to fetch settings");
   }
 }
@@ -506,16 +505,12 @@ export async function listMedicationChanges(
       },
     });
 
-    console.log(
-      "BENBEN Query command:",
-      JSON.stringify(command.input, null, 2),
-    );
     const response = await docClient.send(command);
     return {
       medicationChanges: (response.Items || []) as MedicationChange[],
     };
   } catch (error) {
-    console.error("BENBEN Error listing medication changes:", error);
+    console.error("Error listing medication changes:", error);
     return { error: "Failed to list medication changes" };
   }
 }
@@ -532,7 +527,7 @@ export async function createMedicationChange(
     await docClient.send(command);
     return { success: true };
   } catch (error) {
-    console.error("BENBEN Error creating medication change:", error);
+    console.error("Error creating medication change:", error);
     return { error: "Failed to create medication change" };
   }
 }
@@ -551,7 +546,7 @@ export async function deleteMedicationChange(patientId: string, date: number) {
     revalidatePath("/");
     return { success: true };
   } catch (error) {
-    console.error("BENBEN Error deleting medication change:", error);
+    console.error("Error deleting medication change:", error);
     return { error: "Failed to delete medication change" };
   }
 }

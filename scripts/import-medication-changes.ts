@@ -39,7 +39,7 @@ async function main() {
         `Successfully imported change for ${change.date}: ${change.medication} ${change.dosage}`,
       );
     } catch (error) {
-      console.error(`BENBEN Error importing change for ${change.date}:`, error);
+      console.error(`Error importing change for ${change.date}:`, error);
       throw error; // Let runScript handle the error
     }
   }

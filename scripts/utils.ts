@@ -65,7 +65,7 @@ export async function runScript(name: string, fn: () => Promise<void>) {
     await fn();
     console.log(`${name} completed successfully!`);
   } catch (error) {
-    console.error(`BENBEN Error in ${name}:`, error);
+    console.error(`Error in ${name}:`, error);
     process.exit(1);
   }
 }
