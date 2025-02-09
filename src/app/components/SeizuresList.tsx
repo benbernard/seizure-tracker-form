@@ -2,11 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { Seizure } from "@/lib/aws/schema";
-import { listSeizures } from "../actions";
-import { BarChart3 } from "lucide-react";
+import { listSeizures, deleteSeizure } from "../actions";
+import { BarChart3, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "react-toastify";
+import { useQueryClient } from "@tanstack/react-query";
 
 function SeizuresList() {
+  const queryClient = useQueryClient();
   const {
     data: seizures = [],
     error,
@@ -80,6 +83,9 @@ function SeizuresList() {
                 <th className="px-4 py-2 text-left border-b border-zinc-600">
                   Notes
                 </th>
+                <th className="px-4 py-2 text-left border-b border-zinc-600 w-[100px]">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -87,6 +93,24 @@ function SeizuresList() {
                 const date = new Date(seizure.date * 1000);
                 const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
                 const timeStr = date.toLocaleTimeString();
+
+                const handleDelete = async () => {
+                  if (
+                    !window.confirm(
+                      "Warning: This will only delete the record in DynamoDB. You will need to manually update the Google Sheet. Do you want to proceed?",
+                    )
+                  ) {
+                    return;
+                  }
+
+                  const result = await deleteSeizure(seizure.date);
+                  if (result.success) {
+                    toast.success("Seizure record deleted");
+                    queryClient.invalidateQueries({ queryKey: ["seizures"] });
+                  } else {
+                    toast.error(result.error || "Failed to delete seizure");
+                  }
+                };
 
                 return (
                   <tr
@@ -105,6 +129,15 @@ function SeizuresList() {
                       {(seizure.notes?.endsWith(":")
                         ? seizure.notes.slice(0, -1)
                         : seizure.notes) || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={handleDelete}
+                        className="p-2 text-red-400 hover:text-red-300 transition-colors rounded-full hover:bg-red-400/10"
+                        title="Delete seizure record"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 );

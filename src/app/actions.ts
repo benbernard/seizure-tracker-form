@@ -550,3 +550,22 @@ export async function deleteMedicationChange(patientId: string, date: number) {
     return { error: "Failed to delete medication change" };
   }
 }
+
+export async function deleteSeizure(date: number) {
+  try {
+    const command = new DeleteCommand({
+      TableName: SEIZURES_TABLE,
+      Key: {
+        patient: "kat",
+        date,
+      },
+    });
+
+    await docClient.send(command);
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting seizure:", error);
+    return { error: "Failed to delete seizure" };
+  }
+}
