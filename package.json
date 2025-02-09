@@ -11,11 +11,14 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.744.0",
     "@aws-sdk/lib-dynamodb": "^3.744.0",
+    "@tanstack/react-query": "^5.66.0",
     "axios": "^1.6.7",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-toastify": "^10.0.4"
+    "react-error-boundary": "^5.0.0",
+    "react-toastify": "^10.0.4",
+    "swr": "^2.3.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
