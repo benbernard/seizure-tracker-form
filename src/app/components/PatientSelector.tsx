@@ -17,7 +17,7 @@ export default function PatientSelector({ settings }: { settings: Settings }) {
         const patientsList = await getPatients();
         setPatients(patientsList);
       } catch (error) {
-        console.error("BENBEN: Error loading patients:", error);
+        console.error("Error loading patients:", error);
         toast.error("Failed to load patients");
       } finally {
         setLoading(false);
@@ -33,7 +33,7 @@ export default function PatientSelector({ settings }: { settings: Settings }) {
       toast.success("Patient updated successfully");
       router.refresh();
     } catch (error) {
-      console.error("BENBEN: Error updating patient:", error);
+      console.error("Error updating patient:", error);
       toast.error("Failed to update patient");
     }
   };

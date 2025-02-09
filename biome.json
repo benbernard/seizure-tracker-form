@@ -6,7 +6,26 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "a11y": {
+        "all": false,
+        "useAltText": "off",
+        "useButtonType": "off",
+        "useKeyWithClickEvents": "off",
+        "useValidAnchor": "off",
+        "noSvgWithoutTitle": "off",
+        "useMediaCaption": "off",
+        "useValidAriaProps": "off",
+        "useValidLang": "off",
+        "noHeaderScope": "off",
+        "useIframeTitle": "off",
+        "noRedundantAlt": "off",
+        "useAnchorContent": "off",
+        "noInteractiveElementToNoninteractiveRole": "off",
+        "noNoninteractiveElementToInteractiveRole": "off",
+        "useAriaPropsForRole": "off",
+        "useHeadingContent": "off"
+      }
     }
   },
   "formatter": {

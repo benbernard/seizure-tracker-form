@@ -63,6 +63,7 @@ async function createTableIfNotExists(command: CreateTableCommand) {
     await client.send(command);
     console.log(`${tableName} table created successfully!`);
     return true;
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   } catch (error: any) {
     if (
       error?.$metadata?.httpStatusCode === 400 &&

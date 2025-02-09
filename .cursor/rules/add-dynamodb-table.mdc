@@ -76,7 +76,7 @@ export async function myNewTableAction() {
     const response = await docClient.send(command);
     return { items: response.Items || [] };
   } catch (error) {
-    console.error("BENBEN: Error:", error);
+    console.error("Error:", error);
     return { error: "Failed to execute action" };
   }
 }

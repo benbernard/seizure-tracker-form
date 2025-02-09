@@ -6,7 +6,7 @@ if (
   !process.env.AWS_ACCESS_KEY_ID ||
   !process.env.AWS_SECRET_ACCESS_KEY
 ) {
-  console.error("BENBEN: Missing required AWS environment variables");
+  console.error("Error: Missing required AWS environment variables");
   throw new Error("Missing required AWS environment variables");
 }
 

@@ -1,6 +1,14 @@
 {
   "version": "0.2",
   "language": "en",
-  "ignorePaths": ["node_modules/**", ".env.local"],
-  "words": ["Latenode", "Toastify", "turbopack"]
+  "ignorePaths": [
+    "node_modules/**",
+    ".env.local"
+  ],
+  "words": [
+    "confs",
+    "Latenode",
+    "Toastify",
+    "turbopack"
+  ]
 }

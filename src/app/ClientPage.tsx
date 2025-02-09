@@ -58,9 +58,6 @@ function QuickButton({
   formAction: (formData: FormData) => void;
 }) {
   const { pending } = useFormStatus();
-  console.log(
-    `BENBEN QuickButton rendering for ${seconds}s, disabled: ${disabled}, pending: ${pending}`,
-  );
 
   return (
     <button

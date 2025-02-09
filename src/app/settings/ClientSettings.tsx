@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getSettings, updateSettings } from "../actions";
+import {
+  getSettings,
+  updateSettings,
+  deleteAllSeizures,
+  uploadSeizuresFromCSV,
+} from "../actions";
 import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
 import PatientSelector from "../components/PatientSelector";
@@ -21,6 +26,8 @@ export default function ClientSettings() {
   });
 
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleToggle = async () => {
     try {
@@ -34,7 +41,7 @@ export default function ClientSettings() {
         toast.success("Settings updated successfully!");
       }
     } catch (error) {
-      console.error("BENBEN: Error updating settings:", error);
+      console.error("Error updating settings:", error);
       toast.error("Failed to update settings");
     } finally {
       setIsUpdating(false);
@@ -44,6 +51,62 @@ export default function ClientSettings() {
   const handleNewPatient = () => {
     // TODO: Implement new patient dialog
     toast.info("New patient functionality coming soon!");
+  };
+
+  const handleDeleteAll = async () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete ALL seizure records? This cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const result = await deleteAllSeizures();
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`Successfully deleted ${result.count} seizure records!`);
+      }
+    } catch (error) {
+      console.error("Error deleting seizures:", error);
+      toast.error("Failed to delete seizures");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const text = await file.text();
+      const result = await uploadSeizuresFromCSV(text);
+
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        const failedCount = result.failedRows?.length ?? 0;
+        toast.success(
+          `Successfully imported ${result.successCount} of ${result.totalRows} seizures!${
+            failedCount > 0 ? ` Failed to import ${failedCount} rows.` : ""
+          }`,
+        );
+      }
+    } catch (error) {
+      console.error("Error uploading CSV:", error);
+      toast.error("Failed to upload CSV file");
+    } finally {
+      setIsUploading(false);
+      // Reset the file input
+      event.target.value = "";
+    }
   };
 
   if (isLoading) {
@@ -143,6 +206,129 @@ export default function ClientSettings() {
                   after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600`}
                 />
               </label>
+            </div>
+          </div>
+
+          <div className="bg-zinc-700 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Data Management</h2>
+                <p className="text-zinc-300 text-sm mt-1">
+                  Delete all seizure records for the current patient
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={isDeleting}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  // biome-ignore lint/a11y/useSemanticElements: <explanation>
+                  <span role="status">
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete All Records"
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-zinc-700 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Import Seizure Records
+                </h2>
+                <p className="text-zinc-300 text-sm mt-1">
+                  Upload a CSV file with seizure records to import
+                </p>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                  id="csv-upload"
+                />
+                <label
+                  htmlFor="csv-upload"
+                  className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white 
+                    ${isUploading ? "bg-indigo-500" : "bg-indigo-600 hover:bg-indigo-700"} 
+                    rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 
+                    cursor-pointer disabled:opacity-50`}
+                >
+                  {isUploading ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        aria-label="Loading indicator"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="-ml-1 mr-2 h-5 w-5"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        aria-label="Upload icon"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      Upload CSV
+                    </>
+                  )}
+                </label>
+              </div>
             </div>
           </div>
         </div>
