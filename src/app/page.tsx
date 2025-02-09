@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
@@ -14,10 +16,10 @@ function VercelGreeting() {
         if (!response.ok) {
           throw new Error("Failed to fetch greeting");
         }
-        return response.text();
+        return response.json();
       })
       .then((data) => {
-        setGreeting(data);
+        setGreeting(data.message);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -32,7 +34,7 @@ function VercelGreeting() {
   return <p className="text-xl font-semibold mt-4">{greeting}</p>;
 }
 
-function App() {
+export default function Home() {
   const [duration, setDuration] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,7 +70,7 @@ function App() {
       <div className="flex min-h-screen justify-center p-4 pt-10">
         <div className="w-full max-w-[800px]">
           <div className="mb-4 text-center font-bold text-2xl">
-            Kat Seizure Tracking From Vercel
+            Kat Seizure Tracking From Next.js
           </div>
           <VercelGreeting />
           <div className="mt-4">
@@ -111,7 +113,6 @@ function App() {
                   disabled={loading}
                 >
                   {loading ? (
-                    // biome-ignore lint/a11y/noSvgWithoutTitle: <explanation>
                     <svg
                       className="h-5 w-5 animate-spin text-white"
                       xmlns="http://www.w3.org/2000/svg"
@@ -160,5 +161,3 @@ function App() {
     </div>
   );
 }
-
-export default App;

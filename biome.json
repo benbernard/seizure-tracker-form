@@ -15,8 +15,7 @@
   "overrides": [
     {
       "include": [
-        "./tsconfig.app.json",
-        "./tsconfig.node.json"
+        "./tsconfig.json"
       ],
       "json": {
         "parser": {
