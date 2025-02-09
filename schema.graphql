@@ -1,6 +1,0 @@
-type Patient @model {
-  id: ID! @primaryKey
-  name: String!
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-} 

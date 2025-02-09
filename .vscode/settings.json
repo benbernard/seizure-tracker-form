@@ -1,0 +1,13 @@
+{
+  "editor.defaultFormatter": "biomejs.biome",
+  "search.exclude": {
+    "node_modules": true,
+    "dist": true,
+    ".specstory/**": true
+  },
+  "files.exclude": {
+    "dist": true,
+    ".specstory/**": true
+  },
+  "eslint.enable": false
+}

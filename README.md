@@ -1,42 +1,36 @@
-# vite-biome-tailwind-template
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-![Default webpage screenshot](https://github.com/not-first/vite-biome-tailwind-template/assets/111339712/d0bdd8b6-6b1c-483f-acd4-dc80e1ed8bf6)
----
+## Getting Started
 
-Simple expansion of Vite's React template to create TypeScript projects integrated with:
+First, run the development server:
 
-- [Biome](https://biomejs.dev/): A fast formatter and linter (replacing both ESLint and Prettier) written in rust.
-- [TailwindCSS](https://tailwindcss.com/): CSS utility that provides classes to apply inline styles to components
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-## Contents
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-The unchanged vite-generated files: `.gitignore`, `index.html`, `tsconfig.app.js`, `tsconfig.node.json`, `tsconfig.json`, `vite-config` files.
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-A `package.json` (and `package-lock.json`) file with ESLint, Prettier and their dependencies removed. Biome and TailwindCSS are installed as devDependencies. Available scripts are:
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-- `dev`, `build`, `preview` as provided by Vite
-- `format`: formats the project using Biome's formatter
-- `lint`: lints the project using Biome's linter
+## Learn More
 
-Tailwind config files, including the default `tailwind.config.js` and `postcss.config.js`.
+To learn more about Next.js, take a look at the following resources:
 
-Biome config file `biome.json`. In addition to default config, it has git integration enabled, and has the experimental useSortedClasses (sorting of tailwind classes) rule enabled.
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-## Usage
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-1. Clone to your machine. Do this by:
-    - Copying using [degit](https://github.com/Rich-Harris/degit) to download the files in the repo without the git history. (RECOMMENDED)
-      - `npx degit not-first/vite-biome-tailwind-template project-name`
+## Deploy on Vercel
 
-    - Cloning this repo to your machine. This will keep the git history of this repo.
-       - `git clone https://github.com/not-first/vite-biome-tailwind-template.git`
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-    - Creating a repo using this template. Note that your repo will signify that it was built from this template.
-      - Click [here](https://github.com/not-first/vite-biome-tailwind-template/generate), or the 'Use this template' green button in the top right.
-  
-2. Install dependencies though `npm install`.
-3. Alter for your needs. Remember to:
-   - Update the `LICENSE` to the correct license and name
-   - Change the `name` and `author` properties in `package.json`
-   - Clean up the `README.md`
-4. You are good to go. Start the project with `npm run dev` and you will see an altered Vite starting screen with Vite, React, Biome and Tailwind styled using Tailwind classes.
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

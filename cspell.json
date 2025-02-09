@@ -1,6 +1,15 @@
 {
   "version": "0.2",
   "language": "en",
-  "ignorePaths": ["node_modules/**"],
-  "words": ["amplifyconfiguration", "Toastify"]
+  "ignorePaths": [
+    "node_modules/**",
+    ".env.local"
+  ],
+  "words": [
+    "confs",
+    "Latenode",
+    "papaparse",
+    "Toastify",
+    "turbopack"
+  ]
 }
