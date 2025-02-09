@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getSettings,
   updateSettings,
@@ -14,6 +14,7 @@ import PatientSelector from "../components/PatientSelector";
 
 export default function ClientSettings() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     data: settings,
     isLoading,
@@ -38,7 +39,7 @@ export default function ClientSettings() {
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Settings updated successfully!");
+        queryClient.invalidateQueries({ queryKey: ["settings"] });
       }
     } catch (error) {
       console.error("Error updating settings:", error);
