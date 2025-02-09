@@ -12,7 +12,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@aws-amplify/backend-cli": "^1.4.9",
     "aws-amplify": "^6.12.3",
     "axios": "^1.7.5",
     "react": "^18.3.1",
@@ -20,15 +19,22 @@
     "react-toastify": "^10.0.5"
   },
   "devDependencies": {
+    "@aws-amplify/backend": "^1.14.0",
+    "@aws-amplify/backend-cli": "^1.4.9",
     "@biomejs/biome": "1.8.3",
     "@types/node": "^22.13.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "aws-cdk": "^2.178.1",
+    "aws-cdk-lib": "^2.178.1",
+    "constructs": "^10.4.2",
+    "esbuild": "^0.25.0",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.4",
-    "typescript": "^5.2.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
     "vite": "^5.3.1"
   }
 }
