@@ -64,20 +64,20 @@ export async function updateSettings({
   }
 }
 
-export async function listSeizures() {
+export async function listSeizures(startTime?: number) {
   try {
-    const oneDayAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
-
     const command = new QueryCommand({
       TableName: SEIZURES_TABLE,
-      KeyConditionExpression: "#patient = :patient AND #date >= :oneDayAgo",
+      KeyConditionExpression: startTime
+        ? "#patient = :patient AND #date >= :startTime"
+        : "#patient = :patient",
       ExpressionAttributeNames: {
         "#patient": "patient",
-        "#date": "date",
+        ...(startTime && { "#date": "date" }),
       },
       ExpressionAttributeValues: {
         ":patient": "kat",
-        ":oneDayAgo": oneDayAgo,
+        ...(startTime && { ":startTime": startTime }),
       },
       ScanIndexForward: false, // This will return items in descending order (newest first)
     });

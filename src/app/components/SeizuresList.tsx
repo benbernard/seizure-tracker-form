@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Seizure } from "@/lib/aws/schema";
 import { listSeizures } from "../actions";
+import { BarChart3 } from "lucide-react";
+import Link from "next/link";
 
 function SeizuresList() {
   const {
@@ -48,33 +50,65 @@ function SeizuresList() {
 
   return (
     <div className="mt-8">
-      <h2 className="text-xl font-semibold mb-4">
-        Recent Seizures ({seizures.length})
+      <h2 className="text-xl font-semibold mb-4 flex items-center justify-between">
+        <span>Recent Seizures ({seizures.length})</span>
+        <Link
+          href="/graphs"
+          className="text-blue-500 hover:text-blue-400 transition-colors"
+          title="View Graphs"
+        >
+          <BarChart3 className="w-6 h-6" />
+        </Link>
       </h2>
       {seizures.length === 0 ? (
         <p className="text-center text-gray-400">
           No seizures recorded in the last 24 hours
         </p>
       ) : (
-        <div className="space-y-4">
-          {seizures.map((seizure: Seizure) => (
-            <div
-              key={seizure.date}
-              className="border border-zinc-600 rounded-lg p-4"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-semibold">{seizure.duration}s duration</p>
-                  <p className="text-sm text-gray-400">
-                    {new Date(seizure.date * 1000).toLocaleString()}
-                  </p>
-                </div>
-                {seizure.notes && (
-                  <p className="text-sm text-gray-300">{seizure.notes}</p>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="min-w-full table-auto border-collapse">
+            <thead>
+              <tr className="bg-zinc-800">
+                <th className="px-4 py-2 text-left border-b border-zinc-600">
+                  Time
+                </th>
+                <th className="px-4 py-2 text-left border-b border-zinc-600">
+                  Duration
+                </th>
+                <th className="px-4 py-2 text-left border-b border-zinc-600">
+                  Notes
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {seizures.map((seizure: Seizure, index: number) => {
+                const date = new Date(seizure.date * 1000);
+                const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
+                const timeStr = date.toLocaleTimeString();
+
+                return (
+                  <tr
+                    key={seizure.date}
+                    className={`border-b border-zinc-700 hover:bg-zinc-800/50 transition-colors ${
+                      index % 2 === 0 ? "" : "bg-zinc-700/10"
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-sm">
+                      {dateStr} {timeStr}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium">{seizure.duration}s</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-300">
+                      {(seizure.notes?.endsWith(":")
+                        ? seizure.notes.slice(0, -1)
+                        : seizure.notes) || "-"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
