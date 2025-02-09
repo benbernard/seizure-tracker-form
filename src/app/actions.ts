@@ -4,6 +4,7 @@ import {
   MEDICATION_CHANGES_TABLE,
   PATIENTS_TABLE,
   SETTINGS_TABLE,
+  LATENODE_SEIZURE_API,
 } from "@/lib/aws/confs";
 import { SEIZURES_TABLE, docClient } from "@/lib/aws/dynamodb";
 import type {
@@ -23,6 +24,7 @@ import {
 import axios from "axios";
 import { revalidatePath } from "next/cache";
 import { parse } from "papaparse";
+import { deleteFromLatenode } from "@/lib/latenode/sheets";
 
 const SETTINGS_ID = "global";
 
@@ -553,7 +555,8 @@ export async function deleteMedicationChange(patientId: string, date: number) {
 
 export async function deleteSeizure(date: number) {
   try {
-    const command = new DeleteCommand({
+    // First get the seizure details
+    const getCommand = new GetCommand({
       TableName: SEIZURES_TABLE,
       Key: {
         patient: "kat",
@@ -561,7 +564,40 @@ export async function deleteSeizure(date: number) {
       },
     });
 
+    const response = await docClient.send(getCommand);
+    const seizure = response.Item as Seizure;
+
+    if (!seizure) {
+      return { error: "Seizure not found" };
+    }
+
+    console.log("BENBEN Found seizure to delete:", seizure);
+
+    // Check settings and call webhook if enabled
+    const settings = await getSettings();
+    if (settings.enableLatenode) {
+      await deleteFromLatenode(
+        new Date(seizure.date * 1000),
+        seizure.duration,
+        seizure.notes || "",
+      );
+    }
+
+    // Commented out deletion for now
+    const command = new DeleteCommand({
+      TableName: SEIZURES_TABLE,
+      Key: {
+        patient: "kat",
+        date,
+      },
+    });
     await docClient.send(command);
+
+    console.log("BENBEN Would have deleted seizure from DynamoDB:", {
+      patient: "kat",
+      date,
+    });
+
     revalidatePath("/");
     return { success: true };
   } catch (error) {

@@ -5,11 +5,53 @@ import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { BarChart3, FileSpreadsheet, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { toast } from "react-toastify";
 import { deleteSeizure, listSeizures } from "../actions";
 
+function DeleteButton({
+  onClick,
+  isDeleting,
+}: { onClick: () => void; isDeleting: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={isDeleting}
+      className="p-2 text-red-400 hover:text-red-300 transition-colors rounded-full hover:bg-red-400/10 disabled:opacity-50 w-8 h-8 flex items-center justify-center"
+      title="Delete seizure record"
+    >
+      {isDeleting ? (
+        <svg
+          className="animate-spin h-4 w-4"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          />
+        </svg>
+      ) : (
+        <Trash2 className="w-4 h-4" />
+      )}
+    </button>
+  );
+}
+
 function SeizuresList() {
   const queryClient = useQueryClient();
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
   const {
     data: seizures = [],
     error,
@@ -52,6 +94,29 @@ function SeizuresList() {
       </div>
     );
   }
+
+  const handleDelete = async (seizure: Seizure) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this seizure record? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(seizure.date);
+    try {
+      const result = await deleteSeizure(seizure.date);
+      if (result.success) {
+        toast.success("Seizure record deleted");
+        queryClient.invalidateQueries({ queryKey: ["seizures"] });
+      } else {
+        toast.error(result.error || "Failed to delete seizure");
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="mt-8">
@@ -106,24 +171,6 @@ function SeizuresList() {
                 const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
                 const timeStr = date.toLocaleTimeString();
 
-                const handleDelete = async () => {
-                  if (
-                    !window.confirm(
-                      "Warning: This will only delete the record in DynamoDB. You will need to manually update the Google Sheet. Do you want to proceed?",
-                    )
-                  ) {
-                    return;
-                  }
-
-                  const result = await deleteSeizure(seizure.date);
-                  if (result.success) {
-                    toast.success("Seizure record deleted");
-                    queryClient.invalidateQueries({ queryKey: ["seizures"] });
-                  } else {
-                    toast.error(result.error || "Failed to delete seizure");
-                  }
-                };
-
                 return (
                   <tr
                     key={seizure.date}
@@ -143,13 +190,10 @@ function SeizuresList() {
                         : seizure.notes) || "-"}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={handleDelete}
-                        className="p-2 text-red-400 hover:text-red-300 transition-colors rounded-full hover:bg-red-400/10"
-                        title="Delete seizure record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <DeleteButton
+                        onClick={() => handleDelete(seizure)}
+                        isDeleting={deletingId === seizure.date}
+                      />
                     </td>
                   </tr>
                 );
