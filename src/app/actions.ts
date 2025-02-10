@@ -117,11 +117,6 @@ export async function listSeizures(
       ScanIndexForward: false, // Sort in descending order (newest first)
     });
 
-    console.log("BENBEN Querying seizures with params:", {
-      startTimestamp,
-      endTimestamp,
-    });
-
     const response = await docClient.send(command);
     return { seizures: response.Items as Seizure[] };
   } catch (error) {

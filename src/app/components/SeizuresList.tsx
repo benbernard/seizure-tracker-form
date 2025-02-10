@@ -88,10 +88,6 @@ function SeizuresList() {
     queryFn: async () => {
       const startOfDay = getCurrentPacificDayStartTimestamp();
       const endTime = oldestTimestamp || startOfDay;
-      console.log(
-        "BENBEN Loading older seizures before:",
-        new Date(endTime * 1000).toISOString(),
-      );
 
       const result = await listSeizures(0, endTime - 1); // Subtract 1 second to exclude current oldest
       if (result.error) {
@@ -250,10 +246,6 @@ function SeizuresList() {
                     ? olderSeizures[olderSeizures.length - 1]
                     : todaySeizures[todaySeizures.length - 1];
                 if (lastSeizure) {
-                  console.log(
-                    "BENBEN Setting new oldest timestamp to:",
-                    new Date(lastSeizure.date * 1000).toISOString(),
-                  );
                   setOldestTimestamp(lastSeizure.date);
                 }
               }}
