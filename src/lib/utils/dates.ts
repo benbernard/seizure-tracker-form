@@ -33,6 +33,6 @@ export function formatPacificDateTime(utcTimestamp: number): {
 
   return {
     dateStr: pacificDate.toFormat("yyyy-MM-dd"),
-    timeStr: pacificDate.toFormat("h:mm:ss a"),
+    timeStr: pacificDate.toFormat("h:mm a"),
   };
 }
