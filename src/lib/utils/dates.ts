@@ -36,3 +36,21 @@ export function formatPacificDateTime(utcTimestamp: number): {
     timeStr: pacificDate.toFormat("h:mm a"),
   };
 }
+
+// Get UTC timestamp for start of current Pacific day
+export function getCurrentPacificDayStartTimestamp(): number {
+  return DateTime.now()
+    .setZone("America/Los_Angeles")
+    .startOf("day")
+    .toUTC()
+    .toSeconds();
+}
+
+// Get UTC timestamp for end of current Pacific day
+export function getCurrentPacificDayEndTimestamp(): number {
+  return DateTime.now()
+    .setZone("America/Los_Angeles")
+    .endOf("day")
+    .toUTC()
+    .toSeconds();
+}

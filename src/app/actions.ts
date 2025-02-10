@@ -91,29 +91,42 @@ export async function updateSettings({
   }
 }
 
-export async function listSeizures(startTime?: number) {
+export async function listSeizures(
+  startTimestamp: number,
+  endTimestamp?: number,
+) {
   try {
     const command = new QueryCommand({
-      TableName: SEIZURES_TABLE,
-      KeyConditionExpression: startTime
-        ? "#patient = :patient AND #date >= :startTime"
-        : "#patient = :patient",
+      TableName: process.env.DYNAMODB_TABLE || "seizures",
+      KeyConditionExpression: endTimestamp
+        ? "patient = :patient AND #date BETWEEN :start AND :end"
+        : "patient = :patient AND #date >= :start",
       ExpressionAttributeNames: {
-        "#patient": "patient",
-        ...(startTime && { "#date": "date" }),
+        "#date": "date",
       },
-      ExpressionAttributeValues: {
-        ":patient": "kat",
-        ...(startTime && { ":startTime": startTime }),
-      },
-      ScanIndexForward: false, // This will return items in descending order (newest first)
+      ExpressionAttributeValues: endTimestamp
+        ? {
+            ":patient": "kat",
+            ":start": startTimestamp,
+            ":end": endTimestamp,
+          }
+        : {
+            ":patient": "kat",
+            ":start": startTimestamp,
+          },
+      ScanIndexForward: false, // Sort in descending order (newest first)
+    });
+
+    console.log("BENBEN Querying seizures with params:", {
+      startTimestamp,
+      endTimestamp,
     });
 
     const response = await docClient.send(command);
-    return { seizures: (response.Items as Seizure[]) || [] };
+    return { seizures: response.Items as Seizure[] };
   } catch (error) {
-    console.error("Error fetching seizures:", error);
-    return { error: "Failed to fetch seizures" };
+    console.error("Error listing seizures:", error);
+    return { error: "Failed to list seizures" };
   }
 }
 
@@ -573,8 +586,6 @@ export async function deleteSeizure(date: number) {
       return { error: "Seizure not found" };
     }
 
-    console.log("BENBEN Found seizure to delete:", seizure);
-
     // Check settings and call webhook if enabled
     const settings = await getSettings();
     if (settings.enableLatenode) {
@@ -594,11 +605,6 @@ export async function deleteSeizure(date: number) {
       },
     });
     await docClient.send(command);
-
-    console.log("BENBEN Would have deleted seizure from DynamoDB:", {
-      patient: "kat",
-      date,
-    });
 
     revalidatePath("/");
     return { success: true };

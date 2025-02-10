@@ -8,7 +8,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { deleteSeizure, listSeizures } from "../actions";
-import { formatPacificDateTime } from "@/lib/utils/dates";
+import {
+  formatPacificDateTime,
+  getCurrentPacificDayStartTimestamp,
+} from "@/lib/utils/dates";
 
 function DeleteButton({
   onClick,
@@ -52,42 +55,71 @@ function DeleteButton({
 function SeizuresList() {
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [oldestTimestamp, setOldestTimestamp] = useState<number | null>(null);
 
   const {
-    data: seizures = [],
-    error,
-    isLoading,
-    isError,
-    refetch,
+    data: todaySeizures = [],
+    error: todayError,
+    isLoading: isTodayLoading,
+    isError: isTodayError,
+    refetch: refetchToday,
   } = useQuery({
-    queryKey: ["seizures"],
+    queryKey: ["seizures", "today"],
     queryFn: async () => {
-      // Get timestamp for 24 hours ago
-      const oneDayAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
-      const result = await listSeizures(oneDayAgo);
+      const startOfDay = getCurrentPacificDayStartTimestamp();
+      const result = await listSeizures(startOfDay);
       if (result.error) {
         throw new Error(result.error);
       }
       return result.seizures || [];
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 30000,
     refetchOnWindowFocus: true,
     retry: 3,
   });
 
-  if (isLoading) {
+  const {
+    data: olderSeizures = [],
+    error: olderError,
+    isLoading: isOlderLoading,
+    isError: isOlderError,
+  } = useQuery({
+    queryKey: ["seizures", "older", oldestTimestamp],
+    queryFn: async () => {
+      const startOfDay = getCurrentPacificDayStartTimestamp();
+      const endTime = oldestTimestamp || startOfDay;
+      console.log(
+        "BENBEN Loading older seizures before:",
+        new Date(endTime * 1000).toISOString(),
+      );
+
+      const result = await listSeizures(0, endTime - 1); // Subtract 1 second to exclude current oldest
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const seizures = result.seizures || [];
+      return seizures.slice(0, 100);
+    },
+    enabled: !!oldestTimestamp, // Only load older seizures when we have a timestamp
+    retry: 3,
+  });
+
+  if (isTodayLoading) {
     return <p className="text-center mt-4">Loading seizures...</p>;
   }
 
-  if (isError) {
+  if (isTodayError) {
     return (
       <div className="text-center mt-4">
         <p className="text-red-500 mb-2">
-          {error instanceof Error ? error.message : "Failed to load seizures"}
+          {todayError instanceof Error
+            ? todayError.message
+            : "Failed to load seizures"}
         </p>
         <button
           type="button"
-          onClick={() => refetch()}
+          onClick={() => refetchToday()}
           className="px-4 py-2 bg-blue-600 rounded-md hover:bg-blue-500 transition-colors"
         >
           Retry
@@ -119,9 +151,13 @@ function SeizuresList() {
     }
   };
 
+  const seizures = [...todaySeizures, ...olderSeizures];
+  const startOfDay = getCurrentPacificDayStartTimestamp();
+  const displayTimestamp = oldestTimestamp || startOfDay;
+
   return (
     <div className="mt-8">
-      <h2 className="text-xl font-semibold mb-4 flex items-center justify-between">
+      <h2 className="text-xl font-semibold mb-1 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span>Recent Seizures ({seizures.length})</span>
           <a
@@ -143,65 +179,98 @@ function SeizuresList() {
           <BarChart3 className="w-6 h-6" />
         </Link>
       </h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Showing seizures since {formatPacificDateTime(displayTimestamp).dateStr}{" "}
+        at {formatPacificDateTime(displayTimestamp).timeStr}
+      </p>
       {seizures.length === 0 ? (
-        <p className="text-center text-gray-400">
-          No seizures recorded in the last 24 hours
-        </p>
+        <p className="text-center text-gray-400">No seizures recorded</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-auto border-collapse">
-            <thead>
-              <tr className="bg-zinc-800">
-                <th className="px-4 py-2 text-left border-b border-zinc-600 min-w-[220px] whitespace-nowrap">
-                  Time
-                </th>
-                <th className="px-4 py-2 text-left border-b border-zinc-600">
-                  Duration
-                </th>
-                <th className="px-4 py-2 text-left border-b border-zinc-600">
-                  Notes
-                </th>
-                <th className="px-4 py-2 text-left border-b border-zinc-600 w-[100px]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {seizures.map((seizure: Seizure, index: number) => {
-                const { dateStr, timeStr } = formatPacificDateTime(
-                  seizure.date,
-                );
+        <>
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-auto border-collapse">
+              <thead>
+                <tr className="bg-zinc-800">
+                  <th className="px-4 py-2 text-left border-b border-zinc-600 min-w-[220px] whitespace-nowrap">
+                    Time
+                  </th>
+                  <th className="px-4 py-2 text-left border-b border-zinc-600">
+                    Duration
+                  </th>
+                  <th className="px-4 py-2 text-left border-b border-zinc-600">
+                    Notes
+                  </th>
+                  <th className="px-4 py-2 text-left border-b border-zinc-600 w-[100px]">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {seizures.map((seizure: Seizure, index: number) => {
+                  const { dateStr, timeStr } = formatPacificDateTime(
+                    seizure.date,
+                  );
 
-                return (
-                  <tr
-                    key={seizure.date}
-                    className={`border-b border-zinc-700 hover:bg-zinc-800/50 transition-colors ${
-                      index % 2 === 0 ? "" : "bg-zinc-700/10"
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-sm min-w-[220px] whitespace-nowrap">
-                      {dateStr} {timeStr}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-medium">{seizure.duration}s</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-300">
-                      {(seizure.notes?.endsWith(":")
-                        ? seizure.notes.slice(0, -1)
-                        : seizure.notes) || "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <DeleteButton
-                        onClick={() => handleDelete(seizure)}
-                        isDeleting={deletingId === seizure.date}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  return (
+                    <tr
+                      key={seizure.date}
+                      className={`border-b border-zinc-700 hover:bg-zinc-800/50 transition-colors ${
+                        index % 2 === 0 ? "" : "bg-zinc-700/10"
+                      }`}
+                    >
+                      <td className="px-4 py-3 text-sm min-w-[220px] whitespace-nowrap">
+                        {dateStr} {timeStr}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium">{seizure.duration}s</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {(seizure.notes?.endsWith(":")
+                          ? seizure.notes.slice(0, -1)
+                          : seizure.notes) || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <DeleteButton
+                          onClick={() => handleDelete(seizure)}
+                          isDeleting={deletingId === seizure.date}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => {
+                // Get the last seizure from our current list
+                const lastSeizure =
+                  olderSeizures.length > 0
+                    ? olderSeizures[olderSeizures.length - 1]
+                    : todaySeizures[todaySeizures.length - 1];
+                if (lastSeizure) {
+                  console.log(
+                    "BENBEN Setting new oldest timestamp to:",
+                    new Date(lastSeizure.date * 1000).toISOString(),
+                  );
+                  setOldestTimestamp(lastSeizure.date);
+                }
+              }}
+              disabled={isOlderLoading}
+              className="px-6 py-2 bg-blue-600 rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50"
+            >
+              {isOlderLoading ? "Loading..." : "Load More Seizures"}
+            </button>
+          </div>
+          {isOlderError && (
+            <p className="text-center text-red-500 mt-4">
+              {olderError instanceof Error
+                ? olderError.message
+                : "Failed to load older seizures"}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
