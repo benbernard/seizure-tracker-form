@@ -201,12 +201,20 @@ function SeizuresList() {
           <BarChart3 className="w-6 h-6" />
         </Link>
       </h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Showing seizures since {formatPacificDateTime(displayTimestamp).dateStr}{" "}
-        at {formatPacificDateTime(displayTimestamp).timeStr}
-      </p>
+      {seizures.length > 0 && (
+        <p className="text-sm text-gray-500 mb-4">
+          Showing seizures since{" "}
+          {formatPacificDateTime(displayTimestamp).dateStr} at{" "}
+          {formatPacificDateTime(displayTimestamp).timeStr}
+        </p>
+      )}
       {seizures.length === 0 ? (
-        <p className="text-center text-gray-400">No seizures recorded</p>
+        <div>
+          <p className="text-center text-gray-400 mb-4">
+            No seizures since {formatPacificDateTime(displayTimestamp).dateStr}{" "}
+            at {formatPacificDateTime(displayTimestamp).timeStr}
+          </p>
+        </div>
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -261,32 +269,38 @@ function SeizuresList() {
               </tbody>
             </table>
           </div>
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                // Get the last seizure from our current list
-                const lastSeizure =
-                  olderSeizures.length > 0
-                    ? olderSeizures[olderSeizures.length - 1]
-                    : todaySeizures[todaySeizures.length - 1];
-                if (lastSeizure) {
-                  setOldestTimestamp(lastSeizure.date);
-                }
-              }}
-              disabled={isOlderLoading}
-              className="px-6 py-2 bg-blue-600 rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50"
-            >
-              {isOlderLoading ? "Loading..." : "Load More Seizures"}
-            </button>
-          </div>
-          {isOlderError && (
-            <p className="text-center text-red-500 mt-4">
-              {olderError instanceof Error
-                ? olderError.message
-                : "Failed to load older seizures"}
-            </p>
-          )}
         </>
+      )}
+      <div className="mt-6 text-center">
+        <button
+          onClick={() => {
+            // If we have no seizures, use the current display timestamp
+            if (seizures.length === 0) {
+              setOldestTimestamp(displayTimestamp);
+              return;
+            }
+
+            // Otherwise use the last seizure timestamp
+            const lastSeizure =
+              olderSeizures.length > 0
+                ? olderSeizures[olderSeizures.length - 1]
+                : todaySeizures[todaySeizures.length - 1];
+            if (lastSeizure) {
+              setOldestTimestamp(lastSeizure.date);
+            }
+          }}
+          disabled={isOlderLoading}
+          className="px-6 py-2 bg-blue-600 rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50"
+        >
+          {isOlderLoading ? "Loading..." : "Load More Seizures"}
+        </button>
+      </div>
+      {isOlderError && (
+        <p className="text-center text-red-500 mt-4">
+          {olderError instanceof Error
+            ? olderError.message
+            : "Failed to load older seizures"}
+        </p>
       )}
     </div>
   );
