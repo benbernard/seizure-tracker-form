@@ -97,11 +97,13 @@ function SeizureChart({
   title,
   dotSize = 4,
   medicationChanges = [],
+  verticalLabels = false,
 }: {
   data: { date: string; count: number }[];
   title: string;
   dotSize?: number;
   medicationChanges?: MedicationChange[];
+  verticalLabels?: boolean;
 }) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const expandButtonRef = useRef<HTMLButtonElement>(null);
@@ -121,8 +123,8 @@ function SeizureChart({
       const prevDate = prevChange.date * 1000;
       const daysDiff = Math.abs(currentDate - prevDate) / DAY_IN_MS;
 
-      // If changes are within 3 days of each other, stagger their labels
-      if (daysDiff <= 3) {
+      // If changes are within 3 days of each other and we're not using vertical labels, stagger their labels
+      if (daysDiff <= 3 && !verticalLabels) {
         const prevOffset = labelOffsets.get(prevChange.date) || 0;
         labelOffsets.set(change.date, prevOffset + 20);
       }
@@ -154,7 +156,7 @@ function SeizureChart({
       <LineChart
         data={data}
         margin={{
-          top: 50,
+          top: verticalLabels ? 120 : 50,
           right: 80,
           left: 10,
           bottom: 30,
@@ -189,8 +191,13 @@ function SeizureChart({
               position: "top",
               fill: "#f59e0b",
               fontSize: 12,
-              offset: 10 + (labelOffsets.get(change.date) || 0),
-              textAnchor: "middle",
+              offset: verticalLabels
+                ? 2
+                : 10 + (labelOffsets.get(change.date) || 0),
+              textAnchor: verticalLabels ? "start" : "middle",
+              angle: verticalLabels ? 270 : 0,
+              dy: verticalLabels ? 65 : 0,
+              dx: verticalLabels ? -3 : 0,
             }}
           />
         ))}
@@ -750,6 +757,7 @@ function GraphsContent() {
               )})`}
               dotSize={0}
               medicationChanges={medicationChanges}
+              verticalLabels={true}
             />
           )}
 
