@@ -199,7 +199,7 @@ function SeizureChart({
           dataKey="count"
           stroke="#22c55e"
           strokeWidth={2}
-          dot={{ fill: "#22c55e", r: dotSize }}
+          dot={dotSize ? { fill: "#22c55e", r: dotSize } : false}
           name="Seizures"
         />
       </LineChart>
@@ -725,7 +725,7 @@ function GraphsContent() {
           <SeizureChart
             data={recentChartData}
             title={`Last 6 Weeks (${getDateRangeString()})`}
-            dotSize={4}
+            dotSize={0}
             medicationChanges={medicationChanges}
           />
 
@@ -748,7 +748,7 @@ function GraphsContent() {
               title={`All Time (${getDateRangeString(
                 new Date(allSeizures[allSeizures.length - 1]?.date * 1000),
               )})`}
-              dotSize={2}
+              dotSize={0}
               medicationChanges={medicationChanges}
             />
           )}
