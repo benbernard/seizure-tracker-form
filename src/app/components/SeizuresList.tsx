@@ -52,6 +52,32 @@ function DeleteButton({
   );
 }
 
+// Helper function to clean notes of common prefixes
+function cleanNotes(notes: string | undefined): string {
+  if (!notes) return "-";
+
+  // List of prefixes to remove
+  const prefixesToRemove = [
+    "WebForm: ",
+    "WebForm:",
+    "WebForm",
+    "From HA",
+    "Alexa Invocation",
+    "QuickAction",
+    "api",
+  ];
+
+  let cleanedNotes = notes;
+  for (const prefix of prefixesToRemove) {
+    if (cleanedNotes.startsWith(prefix)) {
+      cleanedNotes = cleanedNotes.slice(prefix.length).trim();
+    }
+  }
+
+  // If after cleaning we have an empty string or just a colon, return '-'
+  return cleanedNotes.replace(/^:/, "").trim() || "-";
+}
+
 function SeizuresList() {
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -221,9 +247,7 @@ function SeizuresList() {
                         <span className="font-medium">{seizure.duration}s</span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
-                        {(seizure.notes?.endsWith(":")
-                          ? seizure.notes.slice(0, -1)
-                          : seizure.notes) || "-"}
+                        {cleanNotes(seizure.notes)}
                       </td>
                       <td className="px-4 py-3">
                         <DeleteButton
