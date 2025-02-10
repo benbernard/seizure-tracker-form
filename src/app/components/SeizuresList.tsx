@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { deleteSeizure, listSeizures } from "../actions";
+import { formatPacificDateTime } from "@/lib/utils/dates";
 
 function DeleteButton({
   onClick,
@@ -167,9 +168,9 @@ function SeizuresList() {
             </thead>
             <tbody>
               {seizures.map((seizure: Seizure, index: number) => {
-                const date = new Date(seizure.date * 1000);
-                const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
-                const timeStr = date.toLocaleTimeString();
+                const { dateStr, timeStr } = formatPacificDateTime(
+                  seizure.date,
+                );
 
                 return (
                   <tr

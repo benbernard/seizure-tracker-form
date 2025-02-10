@@ -25,6 +25,10 @@ import axios from "axios";
 import { revalidatePath } from "next/cache";
 import { parse } from "papaparse";
 import { deleteFromLatenode } from "@/lib/latenode/sheets";
+import {
+  getCurrentUtcTimestamp,
+  pacificToUtcTimestamp,
+} from "@/lib/utils/dates";
 
 const SETTINGS_ID = "global";
 
@@ -117,7 +121,7 @@ export async function submitSeizure(duration: string, notes?: string) {
   try {
     const seizure: Seizure = {
       patient: "kat",
-      date: Math.floor(Date.now() / 1000),
+      date: getCurrentUtcTimestamp(),
       duration: Number(duration),
       notes: notes?.trim() || "WebForm",
     };
@@ -311,7 +315,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
       try {
         const [timeStr, durationStr, notes] = row;
 
-        // Parse the date string to Date object
+        // Parse the date string to Date object, assuming Pacific time
         const date = new Date(timeStr);
         if (Number.isNaN(date.getTime())) {
           console.error(
@@ -356,7 +360,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
     // Sort rows by date
     parsedRows.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // Group by minute and add seconds
+    // Group by minute
     const minuteGroups = new Map<string, ParsedRow[]>();
     for (const row of parsedRows) {
       const minuteKey = row.date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
@@ -374,7 +378,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
     const batches: Seizure[][] = [];
     const currentBatch: Seizure[] = [];
 
-    // Create seizures with adjusted seconds
+    // Create seizures with adjusted seconds and convert to UTC
     for (const [, rows] of minuteGroups) {
       rows.forEach((row, index) => {
         const adjustedDate = new Date(row.date);
@@ -382,7 +386,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
 
         const seizure: Seizure = {
           patient: "kat",
-          date: Math.floor(adjustedDate.getTime() / 1000),
+          date: pacificToUtcTimestamp(adjustedDate),
           duration: row.duration,
           notes: row.notes,
         };
@@ -427,9 +431,8 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
           for (const item of result.UnprocessedItems[SEIZURES_TABLE]) {
             if (item.PutRequest?.Item) {
               const seizure = item.PutRequest.Item;
-              const date = new Date(seizure.date * 1000).toISOString();
               failedRows.push(
-                `DynamoDB failed to process: date=${date}, duration=${seizure.duration}, notes=${seizure.notes}. Reason: ${JSON.stringify(item)}`,
+                `DynamoDB failed to process: date=${seizure.date}, duration=${seizure.duration}, notes=${seizure.notes}. Reason: ${JSON.stringify(item)}`,
               );
             }
           }
@@ -458,7 +461,6 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
         }
         // Add all items in the failed batch to failedRows with more context
         for (const seizure of batch) {
-          const date = new Date(seizure.date * 1000).toISOString();
           const errorDetails =
             error instanceof Error
               ? `${error.name}: ${error.message}${
@@ -467,7 +469,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
                 }`
               : "Unknown error";
           failedRows.push(
-            `DynamoDB batch error (${errorDetails}): date=${date}, duration=${seizure.duration}, notes=${seizure.notes}`,
+            `DynamoDB batch error (${errorDetails}): date=${seizure.date}, duration=${seizure.duration}, notes=${seizure.notes}`,
           );
         }
       }
