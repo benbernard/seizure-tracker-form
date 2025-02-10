@@ -10,7 +10,9 @@
     "format": "biome format . --write",
     "create-tables": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-tables.ts",
     "create-default-patient": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-default-patient.ts",
-    "import-medication-changes": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/import-medication-changes.ts"
+    "import-medication-changes": "ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/import-medication-changes.ts",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.744.0",
@@ -34,12 +36,15 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^16.4.7",
+    "jest": "^29.7.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5"

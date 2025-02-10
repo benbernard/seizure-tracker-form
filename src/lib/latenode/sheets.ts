@@ -58,9 +58,15 @@ async function findMatchingRows(
       return [];
     }
 
+    // Convert target date to Pacific time for comparison
+    const targetDatePacific = new Date(
+      targetDate.getTime() - 8 * 60 * 60 * 1000,
+    ); // Convert to Pacific by subtracting 8 hours
+
     if (DEBUG_DELETE) {
       console.log("DEBUG_DELETE Looking for seizure with:", {
-        targetDate: targetDate.toISOString(),
+        targetDateUTC: targetDate.toISOString(),
+        targetDatePacific: targetDatePacific.toISOString(),
         duration,
         note: cleanNote(note),
       });
@@ -96,7 +102,8 @@ async function findMatchingRows(
       .filter((row): row is NonNullable<typeof row> => row !== null)
       .filter((row) => {
         const cleanedRowNote = cleanNote(row.note);
-        const datesMatch = row.parsedDate.getTime() === targetDate.getTime();
+        const datesMatch =
+          row.parsedDate.getTime() === targetDatePacific.getTime();
         const durationsMatch = row.duration === duration;
         const notesMatch = cleanedRowNote === cleanedTargetNote;
 
@@ -107,6 +114,7 @@ async function findMatchingRows(
             durationsMatch,
             notesMatch,
             rowDate: row.parsedDate.toISOString(),
+            targetDatePacific: targetDatePacific.toISOString(),
             rowDuration: row.duration,
             rowNote: cleanedRowNote,
           });
