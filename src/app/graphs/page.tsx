@@ -600,7 +600,7 @@ function GraphsContent() {
   } = useQuery({
     queryKey: ["seizures", "all", patientId],
     queryFn: async () => {
-      const result = await listSeizures();
+      const result = await listSeizures(0, Math.floor(Date.now() / 1000));
       if (result.error) {
         throw new Error(result.error);
       }
