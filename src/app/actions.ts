@@ -6,6 +6,7 @@ import {
   SETTINGS_TABLE,
   LATENODE_SEIZURE_API,
   DEBUG_DELETE,
+  SKIP_DELETE_WRITES,
 } from "@/lib/aws/confs";
 import { SEIZURES_TABLE, docClient } from "@/lib/aws/dynamodb";
 import type {
@@ -608,15 +609,18 @@ export async function deleteSeizure(date: number) {
         duration: seizure.duration,
         notes: seizure.notes,
       });
-    } else {
-      const command = new DeleteCommand({
+    }
+
+    if (!SKIP_DELETE_WRITES) {
+      const deleteCommand = new DeleteCommand({
         TableName: SEIZURES_TABLE,
         Key: {
           patient: "kat",
           date,
         },
       });
-      await docClient.send(command);
+
+      await docClient.send(deleteCommand);
     }
 
     revalidatePath("/");

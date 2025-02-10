@@ -1,5 +1,9 @@
 import axios from "axios";
-import { LATENODE_SEIZURE_API, DEBUG_DELETE } from "@/lib/aws/confs";
+import {
+  LATENODE_SEIZURE_API,
+  DEBUG_DELETE,
+  SKIP_DELETE_WRITES,
+} from "@/lib/aws/confs";
 import { parse as parseDate } from "date-fns";
 
 interface SheetRow {
@@ -174,7 +178,10 @@ export async function deleteFromLatenode(
         duration: row.duration,
         note: row.note,
       });
-      continue; // Skip actual deletion in debug mode
+    }
+
+    if (SKIP_DELETE_WRITES) {
+      continue; // Skip actual deletion when SKIP_DELETE_WRITES is true
     }
 
     await axios.delete(LATENODE_SEIZURE_API, {
