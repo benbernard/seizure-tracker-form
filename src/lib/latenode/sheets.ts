@@ -9,12 +9,12 @@ interface SheetRow {
   note: string;
 }
 
-function cleanNote(note: string | null | undefined): string {
+export function cleanNote(note: string | null | undefined): string {
   if (!note) return "";
   return note.trim();
 }
 
-function parseSheetDate(dateStr: string): Date | null {
+export function parseSheetDate(dateStr: string): Date | null {
   try {
     // Try MM/dd/yyyy HH:mm format first
     let parsed = parseDate(dateStr, "MM/dd/yyyy HH:mm", new Date());

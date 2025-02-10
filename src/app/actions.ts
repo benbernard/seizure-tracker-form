@@ -25,7 +25,11 @@ import {
 import axios from "axios";
 import { revalidatePath } from "next/cache";
 import { parse } from "papaparse";
-import { deleteFromLatenode } from "@/lib/latenode/sheets";
+import {
+  deleteFromLatenode,
+  parseSheetDate,
+  cleanNote,
+} from "@/lib/latenode/sheets";
 import {
   getCurrentUtcTimestamp,
   pacificToUtcTimestamp,
@@ -620,5 +624,153 @@ export async function deleteSeizure(date: number) {
   } catch (error) {
     console.error("Error deleting seizure:", error);
     return { error: "Failed to delete seizure" };
+  }
+}
+
+export async function importSeizuresFromSheet() {
+  try {
+    console.log("BENBEN Starting sheet import...");
+    const response = await axios.get(LATENODE_SEIZURE_API);
+    const rows = response.data as [string, string, string][];
+
+    // Skip header row
+    const dataRows = rows.slice(1);
+    console.log(`BENBEN Processing ${dataRows.length} rows from sheet...`);
+
+    const failedRows: string[] = [];
+    let successCount = 0;
+
+    // First, parse all rows and group by minute to avoid timestamp collisions
+    interface ParsedRow {
+      originalRow: string[];
+      date: Date;
+      duration: number;
+      notes: string;
+    }
+
+    const parsedRows: ParsedRow[] = [];
+    const minuteGroups = new Map<string, ParsedRow[]>();
+
+    for (const row of dataRows) {
+      const [dateStr, durationStr, noteStr] = row;
+      const parsedDate = parseSheetDate(dateStr);
+
+      if (!parsedDate) {
+        failedRows.push(`Failed to parse date: ${dateStr}`);
+        continue;
+      }
+
+      const duration = Number(durationStr);
+      if (Number.isNaN(duration)) {
+        failedRows.push(`Invalid duration: ${durationStr}`);
+        continue;
+      }
+
+      const parsedRow: ParsedRow = {
+        originalRow: row,
+        date: parsedDate,
+        duration,
+        notes: cleanNote(noteStr) || "SheetImport",
+      };
+
+      parsedRows.push(parsedRow);
+    }
+
+    // Group by minute to avoid timestamp collisions
+    for (const row of parsedRows) {
+      const minuteKey = row.date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+      if (!minuteGroups.has(minuteKey)) {
+        minuteGroups.set(minuteKey, []);
+      }
+      const group = minuteGroups.get(minuteKey);
+      if (group) {
+        group.push(row);
+      }
+    }
+
+    // Process rows in batches of 25 (DynamoDB BatchWrite limit)
+    const BATCH_SIZE = 25;
+    const batches: Seizure[][] = [];
+    const currentBatch: Seizure[] = [];
+
+    // Create seizures with adjusted seconds and convert to UTC
+    for (const [, rows] of minuteGroups) {
+      rows.forEach((row, index) => {
+        const adjustedDate = new Date(row.date);
+        adjustedDate.setSeconds(index); // Add sequential seconds
+
+        const seizure: Seizure = {
+          patient: "kat",
+          date: pacificToUtcTimestamp(adjustedDate),
+          duration: row.duration,
+          notes: row.notes,
+        };
+
+        currentBatch.push(seizure);
+
+        // When we reach BATCH_SIZE, create a new batch
+        if (currentBatch.length === BATCH_SIZE) {
+          batches.push([...currentBatch]);
+          currentBatch.length = 0;
+        }
+      });
+    }
+
+    // Don't forget the last partial batch
+    if (currentBatch.length > 0) {
+      batches.push([...currentBatch]);
+    }
+
+    // Process each batch
+    for (const batch of batches) {
+      try {
+        const batchCommand = new BatchWriteCommand({
+          RequestItems: {
+            [SEIZURES_TABLE]: batch.map((seizure) => ({
+              PutRequest: {
+                Item: seizure,
+              },
+            })),
+          },
+        });
+
+        const result = await docClient.send(batchCommand);
+
+        // Handle unprocessed items
+        if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
+          console.error(
+            "BENBEN Error: Some items were not processed:",
+            result.UnprocessedItems[SEIZURES_TABLE],
+          );
+          failedRows.push(
+            ...result.UnprocessedItems[SEIZURES_TABLE].map(
+              (item) => `Failed to process item: ${JSON.stringify(item)}`,
+            ),
+          );
+        } else {
+          successCount += batch.length;
+          if (successCount % 500 === 0 || successCount === parsedRows.length) {
+            console.log(
+              `BENBEN Imported ${successCount} of ${parsedRows.length} seizures...`,
+            );
+          }
+        }
+      } catch (error) {
+        console.error("BENBEN Error processing import batch:", error);
+        throw error;
+      }
+    }
+
+    console.log(`BENBEN Import complete. ${successCount} seizures imported.`);
+    revalidatePath("/");
+    return {
+      success: true,
+      successCount,
+      totalRows: dataRows.length,
+      failedRows: failedRows.length > 0 ? failedRows : undefined,
+    };
+  } catch (error) {
+    console.error("BENBEN Error importing seizures from sheet:", error);
+    return { error: "Failed to import seizures from sheet" };
   }
 }
