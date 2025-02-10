@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const result = await submitSeizure(duration.toString(), notes);
+    const result = await submitSeizure(duration.toString(), notes || "api");
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 });

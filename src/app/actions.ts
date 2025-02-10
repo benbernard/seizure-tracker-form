@@ -5,6 +5,7 @@ import {
   PATIENTS_TABLE,
   SETTINGS_TABLE,
   LATENODE_SEIZURE_API,
+  DEBUG_DELETE,
 } from "@/lib/aws/confs";
 import { SEIZURES_TABLE, docClient } from "@/lib/aws/dynamodb";
 import type {
@@ -148,7 +149,7 @@ export async function submitSeizure(duration: string, notes?: string) {
         "https://webhook.latenode.com/11681/prod/84908c3c-1283-4f18-9ef3-d773bd08ad6e",
         {
           duration,
-          notes: `WebForm: ${notes?.trim() || ""}`,
+          notes: seizure.notes,
         },
       );
     }
@@ -584,6 +585,11 @@ export async function deleteSeizure(date: number) {
     // Check settings and call webhook if enabled
     const settings = await getSettings();
     if (settings.enableLatenode) {
+      if (DEBUG_DELETE) {
+        console.log(
+          `Attempting to delete seizure from Latenode: date=${new Date(seizure.date * 1000).toISOString()}, duration=${seizure.duration}, notes=${seizure.notes || ""}`,
+        );
+      }
       await deleteFromLatenode(
         new Date(seizure.date * 1000),
         seizure.duration,
@@ -591,15 +597,23 @@ export async function deleteSeizure(date: number) {
       );
     }
 
-    // Commented out deletion for now
-    const command = new DeleteCommand({
-      TableName: SEIZURES_TABLE,
-      Key: {
+    if (DEBUG_DELETE) {
+      console.log("DEBUG_DELETE Would delete from DynamoDB:", {
         patient: "kat",
         date,
-      },
-    });
-    await docClient.send(command);
+        duration: seizure.duration,
+        notes: seizure.notes,
+      });
+    } else {
+      const command = new DeleteCommand({
+        TableName: SEIZURES_TABLE,
+        Key: {
+          patient: "kat",
+          date,
+        },
+      });
+      await docClient.send(command);
+    }
 
     revalidatePath("/");
     return { success: true };

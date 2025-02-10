@@ -1,5 +1,5 @@
 import axios from "axios";
-import { LATENODE_SEIZURE_API } from "@/lib/aws/confs";
+import { LATENODE_SEIZURE_API, DEBUG_DELETE } from "@/lib/aws/confs";
 import { parse as parseDate } from "date-fns";
 
 interface SheetRow {
@@ -11,7 +11,7 @@ interface SheetRow {
 
 function cleanNote(note: string | null | undefined): string {
   if (!note) return "";
-  return note.trim().replace(/:\s*$/, "");
+  return note.trim();
 }
 
 function parseSheetDate(dateStr: string): Date | null {
@@ -54,6 +54,14 @@ async function findMatchingRows(
       return [];
     }
 
+    if (DEBUG_DELETE) {
+      console.log("DEBUG_DELETE Looking for seizure with:", {
+        targetDate: targetDate.toISOString(),
+        duration,
+        note: cleanNote(note),
+      });
+    }
+
     const cleanedTargetNote = cleanNote(note);
 
     const matches = dataRows
@@ -88,9 +96,33 @@ async function findMatchingRows(
         const durationsMatch = row.duration === duration;
         const notesMatch = cleanedRowNote === cleanedTargetNote;
 
+        if (DEBUG_DELETE && (datesMatch || durationsMatch || notesMatch)) {
+          console.log("DEBUG_DELETE Found partial match:", {
+            rowNum: row.rowNum,
+            datesMatch,
+            durationsMatch,
+            notesMatch,
+            rowDate: row.parsedDate.toISOString(),
+            rowDuration: row.duration,
+            rowNote: cleanedRowNote,
+          });
+        }
+
         return datesMatch && durationsMatch && notesMatch;
       })
       .sort((a, b) => b.rowNum - a.rowNum);
+
+    if (DEBUG_DELETE) {
+      console.log("DEBUG_DELETE Found matching rows:", matches.length);
+      for (const match of matches) {
+        console.log("DEBUG_DELETE Match details:", {
+          rowNum: match.rowNum,
+          date: match.parsedDate.toISOString(),
+          duration: match.duration,
+          note: cleanNote(match.note),
+        });
+      }
+    }
 
     return matches;
   } catch (error) {
@@ -116,14 +148,35 @@ export async function deleteFromLatenode(
   });
   const formattedDate = `${dateStr} ${timeStr}`;
 
+  if (DEBUG_DELETE) {
+    console.log("DEBUG_DELETE Starting deletion process for:", {
+      formattedDate,
+      duration,
+      note,
+    });
+  }
+
   const matchingRows = await findMatchingRows(formattedDate, duration, note);
 
   if (matchingRows.length === 0) {
+    if (DEBUG_DELETE) {
+      console.log("DEBUG_DELETE No matching rows found to delete");
+    }
     return;
   }
 
   // Delete rows one by one, starting from highest row number
   for (const row of matchingRows) {
+    if (DEBUG_DELETE) {
+      console.log("DEBUG_DELETE Would delete row:", {
+        rowNum: row.rowNum,
+        date: row.date,
+        duration: row.duration,
+        note: row.note,
+      });
+      continue; // Skip actual deletion in debug mode
+    }
+
     await axios.delete(LATENODE_SEIZURE_API, {
       data: { rowNum: row.rowNum },
     });
