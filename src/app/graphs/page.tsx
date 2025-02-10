@@ -25,6 +25,10 @@ import {
 } from "../actions";
 import { usePatientId } from "../components/PatientContext";
 import html2canvas from "html2canvas";
+import {
+  formatPacificDateTime,
+  getCurrentPacificDayStartTimestamp,
+} from "@/lib/utils/dates";
 
 function LoadingSpinner() {
   return (
@@ -301,9 +305,9 @@ function processSeizureData(seizures: Seizure[], startDate?: Date) {
 
   // Count seizures per day
   for (const seizure of seizures) {
-    const date = new Date(seizure.date * 1000).toISOString().split("T")[0];
-    if (dailyCounts.has(date)) {
-      dailyCounts.set(date, (dailyCounts.get(date) || 0) + 1);
+    const { dateStr } = formatPacificDateTime(seizure.date);
+    if (dailyCounts.has(dateStr)) {
+      dailyCounts.set(dateStr, (dailyCounts.get(dateStr) || 0) + 1);
     }
   }
 
@@ -480,7 +484,8 @@ function MedicationChangeModal({
 }
 
 function formatDate(timestamp: number) {
-  return new Date(timestamp * 1000).toISOString().split("T")[0];
+  const { dateStr } = formatPacificDateTime(timestamp);
+  return dateStr;
 }
 
 function MedicationChangesList({
