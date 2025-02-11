@@ -298,8 +298,17 @@ function processSeizureData(seizures: Seizure[], startDate?: Date) {
   // Create a map of dates to count
   const dailyCounts = new Map<string, number>();
 
-  // Initialize all dates from start to now with 0
-  for (let d = new Date(start); d <= new Date(); d.setDate(d.getDate() + 1)) {
+  // Get current date in Pacific time
+  const { dateStr: currentPacificDate } = formatPacificDateTime(
+    Math.floor(Date.now() / 1000),
+  );
+
+  // Initialize all dates from start to current Pacific date with 0
+  for (
+    let d = new Date(start);
+    d <= new Date(currentPacificDate);
+    d.setDate(d.getDate() + 1)
+  ) {
     dailyCounts.set(d.toISOString().split("T")[0], 0);
   }
 
