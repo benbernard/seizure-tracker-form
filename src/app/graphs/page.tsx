@@ -448,7 +448,7 @@ function MedicationChangeModal({
 
     const medicationChange = {
       id: patientId,
-      date: Math.floor(new Date(date).getTime() / 1000),
+      date: DateTime.fromISO(date, { zone: "UTC" }).toSeconds(),
       medication,
       dosage,
       type,
@@ -578,8 +578,10 @@ function MedicationChangeModal({
 }
 
 function formatDate(timestamp: number) {
-  const { dateStr } = formatPacificDateTime(timestamp);
-  return dateStr;
+  // Create DateTime from UTC timestamp and format directly in UTC to preserve the date
+  return DateTime.fromSeconds(timestamp, { zone: "UTC" }).toFormat(
+    "yyyy-MM-dd",
+  );
 }
 
 function MedicationChangesList({
