@@ -112,29 +112,22 @@ function SeizureChart({
   verticalLabels?: boolean;
 }) {
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const expandButtonRef = useRef<HTMLButtonElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   // Sort medication changes by date
   const sortedChanges = [...medicationChanges].sort((a, b) => a.date - b.date);
 
-  // Calculate vertical offsets to prevent label overlap
-  const labelOffsets = new Map<number, number>();
-  const DAY_IN_MS = 24 * 60 * 60 * 1000;
-
-  sortedChanges.forEach((change, i) => {
-    const currentDate = change.date * 1000;
-    const prevChange = sortedChanges[i - 1];
-
-    if (prevChange) {
-      const prevDate = prevChange.date * 1000;
-      const daysDiff = Math.abs(currentDate - prevDate) / DAY_IN_MS;
-
-      // If changes are within 3 days of each other and we're not using vertical labels, stagger their labels
-      if (daysDiff <= 3 && !verticalLabels) {
-        const prevOffset = labelOffsets.get(prevChange.date) || 0;
-        labelOffsets.set(change.date, prevOffset + 20);
-      }
-    }
+  // Prepare data with medication changes
+  const enrichedData = data.map((point) => {
+    const changesOnDate = sortedChanges.filter(
+      (change) =>
+        new Date(change.date * 1000).toISOString().split("T")[0] === point.date,
+    );
+    return {
+      ...point,
+      medicationChanges: changesOnDate.length > 0 ? changesOnDate : undefined,
+    };
   });
 
   const handleDownload = async () => {
@@ -160,13 +153,19 @@ function SeizureChart({
   const chartContent = (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart
-        data={data}
+        data={enrichedData}
         margin={{
-          top: verticalLabels ? 120 : 50,
+          top: 80,
           right: 80,
           left: 10,
           bottom: 30,
         }}
+        onMouseMove={(data) => {
+          if (data?.activePayload?.[0]?.payload?.date) {
+            setHoveredDate(data.activePayload[0].payload.date);
+          }
+        }}
+        onMouseLeave={() => setHoveredDate(null)}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#444" />
         <XAxis
@@ -184,29 +183,70 @@ function SeizureChart({
             border: "1px solid #52525b",
             borderRadius: "0.375rem",
             color: "#fff",
+            padding: "8px",
+            boxShadow:
+              "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+          }}
+          content={({ active, payload }) => {
+            if (!active || !payload || !payload.length) return null;
+
+            const data = payload[0].payload;
+            return (
+              <div className="bg-zinc-800 p-3 rounded-lg shadow-lg min-w-[200px]">
+                <p className="font-semibold">{data.date}</p>
+                <p>Seizures: {data.count}</p>
+                {data.medicationChanges?.map((change: MedicationChange) => (
+                  <div
+                    key={`${change.date}-${change.medication}`}
+                    className="mt-2 border-t border-zinc-600 pt-2"
+                  >
+                    <p className="text-amber-400">{change.medication}</p>
+                    <p className="text-sm">
+                      {change.type} - {change.dosage}
+                    </p>
+                    {change.notes && change.notes !== "Bulk import" && (
+                      <p className="text-sm text-gray-400">{change.notes}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
           }}
         />
-        {sortedChanges.map((change) => (
-          <ReferenceLine
-            key={`${change.date}-${change.medication}`}
-            x={new Date(change.date * 1000).toISOString().split("T")[0]}
-            stroke="#f59e0b"
-            strokeDasharray="3 3"
-            label={{
-              value: `${change.medication} - ${change.dosage}`,
-              position: "top",
-              fill: "#f59e0b",
-              fontSize: 12,
-              offset: verticalLabels
-                ? 2
-                : 10 + (labelOffsets.get(change.date) || 0),
-              textAnchor: verticalLabels ? "start" : "middle",
-              angle: verticalLabels ? 270 : 0,
-              dy: verticalLabels ? 65 : 0,
-              dx: verticalLabels ? -3 : 0,
-            }}
-          />
-        ))}
+        {sortedChanges.map((change) => {
+          const changeDate = new Date(change.date * 1000)
+            .toISOString()
+            .split("T")[0];
+          const isHighlighted = hoveredDate === changeDate;
+          return (
+            <g key={`${change.date}-${change.medication}`}>
+              <ReferenceLine
+                key={`${change.date}-${change.medication}-line`}
+                x={changeDate}
+                stroke={isHighlighted ? "#fbbf24" : "#f59e0b"}
+                strokeDasharray="3 3"
+                strokeWidth={isHighlighted ? 2 : 1}
+                label={{
+                  value: `${change.medication} - ${change.dosage}`,
+                  position: "top",
+                  fill: isHighlighted ? "#fbbf24" : "#f59e0b",
+                  fontSize: isHighlighted ? 13 : 12,
+                  offset: 20,
+                  textAnchor: "start",
+                  angle: -45,
+                  dy: -20,
+                  dx: 30,
+                  ...(isHighlighted && {
+                    backgroundColor: "#27272a",
+                    backgroundOpacity: 0.95,
+                    padding: 6,
+                    radius: 4,
+                  }),
+                }}
+              />
+            </g>
+          );
+        })}
         <Line
           type="monotone"
           dataKey="count"
