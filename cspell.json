@@ -1,8 +1,12 @@
 {
   "version": "0.2",
   "language": "en",
-  "ignorePaths": ["node_modules/**", ".env.local"],
+  "ignorePaths": [
+    "node_modules/**",
+    ".env.local"
+  ],
   "words": [
+    "bernards",
     "Clobazam",
     "confs",
     "Epidiolex",
