@@ -29,6 +29,8 @@ import {
   formatPacificDateTime,
   getCurrentPacificDayStartTimestamp,
 } from "@/lib/utils/dates";
+import { DateTime } from "luxon";
+import { processSeizureData, type SeizureDataPoint } from "./utils";
 
 function LoadingSpinner() {
   return (
@@ -285,61 +287,13 @@ function SeizureChart({
   );
 }
 
-function processSeizureData(seizures: Seizure[], startDate?: Date) {
-  // Get start date (either provided or 6 weeks ago)
-  const start =
-    startDate ||
-    (() => {
-      const date = new Date();
-      date.setDate(date.getDate() - 42);
-      return date;
-    })();
-
-  // Create a map of dates to count
-  const dailyCounts = new Map<string, number>();
-
-  // Get current date in Pacific time
-  const { dateStr: currentPacificDate } = formatPacificDateTime(
-    Math.floor(Date.now() / 1000),
-  );
-
-  // Initialize all dates from start to current Pacific date with 0
-  for (
-    let d = new Date(start);
-    d <= new Date(currentPacificDate);
-    d.setDate(d.getDate() + 1)
-  ) {
-    dailyCounts.set(d.toISOString().split("T")[0], 0);
-  }
-
-  // Count seizures per day
-  for (const seizure of seizures) {
-    const { dateStr } = formatPacificDateTime(seizure.date);
-    if (dailyCounts.has(dateStr)) {
-      dailyCounts.set(dateStr, (dailyCounts.get(dateStr) || 0) + 1);
-    }
-  }
-
-  // Convert to array format for recharts
-  return Array.from(dailyCounts.entries())
-    .map(([date, count]) => ({
-      date,
-      count,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
 function getDateRangeString(startDate?: Date) {
-  const endDate = new Date();
-  const start =
-    startDate ||
-    (() => {
-      const date = new Date();
-      date.setDate(date.getDate() - 42);
-      return date;
-    })();
+  const endDate = DateTime.now().setZone("America/Los_Angeles");
+  const start = startDate
+    ? DateTime.fromJSDate(startDate).setZone("America/Los_Angeles")
+    : endDate.minus({ weeks: 6 });
 
-  return `${start.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
+  return `${start.toFormat("M/d/yyyy")} - ${endDate.toFormat("M/d/yyyy")}`;
 }
 
 function MedicationChangeModal({
