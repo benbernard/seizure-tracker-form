@@ -18,6 +18,7 @@ import type { Patient, Seizure, MedicationChange } from "@/lib/aws/schema";
 import PatientSelector from "../components/PatientSelector";
 import { FileSpreadsheet } from "lucide-react";
 import { formatPacificDateTime } from "@/lib/utils/dates";
+import { SignOutButton } from "@clerk/nextjs";
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -453,30 +454,37 @@ export default function ClientSettings() {
   return (
     <div className="min-h-screen bg-zinc-800 text-white p-4">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center mb-8">
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="mr-4 p-2 hover:text-gray-300"
-            aria-label="Back"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="mr-4 p-2 hover:text-gray-300"
+              aria-label="Back"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
-          </button>
-          <h1 className="text-2xl font-bold">Settings</h1>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
+              </svg>
+            </button>
+            <h1 className="text-2xl font-bold">Settings</h1>
+          </div>
+          <SignOutButton>
+            <button className="px-4 mt-2 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+              Sign Out
+            </button>
+          </SignOutButton>
         </div>
 
         <div className="space-y-6">

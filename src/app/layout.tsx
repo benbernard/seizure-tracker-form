@@ -5,6 +5,7 @@ import { ToastContainer } from "react-toastify";
 import QueryProvider from "./QueryProvider";
 import { PatientProvider } from "./components/PatientContext";
 import "react-toastify/dist/ReactToastify.css";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -34,12 +35,14 @@ export default function RootLayout({
       <body
         className={`${geist.variable} ${geistMono.variable} font-sans bg-zinc-900`}
       >
-        <QueryProvider>
-          <PatientProvider>
-            {children}
-            <ToastContainer position="bottom-right" theme="dark" />
-          </PatientProvider>
-        </QueryProvider>
+        <ClerkProvider>
+          <QueryProvider>
+            <PatientProvider>
+              {children}
+              <ToastContainer position="bottom-right" theme="dark" />
+            </PatientProvider>
+          </QueryProvider>
+        </ClerkProvider>
       </body>
     </html>
   );
