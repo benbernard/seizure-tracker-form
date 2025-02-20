@@ -10,9 +10,303 @@ import {
   updateSettings,
   uploadSeizuresFromCSV,
   importSeizuresFromSheet,
+  getPatients,
+  listSeizures,
+  listMedicationChanges,
 } from "../actions";
+import type { Patient, Seizure, MedicationChange } from "@/lib/aws/schema";
 import PatientSelector from "../components/PatientSelector";
 import { FileSpreadsheet } from "lucide-react";
+import { formatPacificDateTime } from "@/lib/utils/dates";
+
+interface DetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  data: Patient | Seizure | MedicationChange | null;
+  title: string;
+}
+
+function DetailModal({ isOpen, onClose, data, title }: DetailModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-zinc-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-300 transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <pre className="bg-zinc-900 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">
+          <code className="text-sm text-zinc-300">
+            {JSON.stringify(data, null, 2)}
+          </code>
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function DataExplorer() {
+  const [selectedTable, setSelectedTable] = useState<
+    "patients" | "seizures" | "medicationChanges"
+  >("patients");
+  const [selectedItem, setSelectedItem] = useState<
+    Patient | Seizure | MedicationChange | null
+  >(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { data: patients = [], isLoading: isLoadingPatients } = useQuery({
+    queryKey: ["patients"],
+    queryFn: getPatients,
+  });
+
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: getSettings,
+  });
+
+  const { data: seizures = [], isLoading: isLoadingSeizures } = useQuery({
+    queryKey: ["seizures", "all", settings?.currentPatientId],
+    queryFn: async () => {
+      if (!settings?.currentPatientId) return [];
+      const result = await listSeizures(0, Math.floor(Date.now() / 1000));
+      return result.seizures || [];
+    },
+    enabled: !!settings?.currentPatientId,
+  });
+
+  const { data: medicationChanges = [], isLoading: isLoadingMedChanges } =
+    useQuery({
+      queryKey: ["medicationChanges", "all", settings?.currentPatientId],
+      queryFn: async () => {
+        if (!settings?.currentPatientId) return [];
+        const result = await listMedicationChanges(settings.currentPatientId);
+        return result.medicationChanges || [];
+      },
+      enabled: !!settings?.currentPatientId,
+    });
+
+  const renderTableData = () => {
+    if (selectedTable === "patients") {
+      return (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-zinc-600">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Created At
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-600">
+              {patients.map((patient) => (
+                <tr
+                  key={patient.id}
+                  onClick={() => {
+                    setSelectedItem(patient);
+                    setIsModalOpen(true);
+                  }}
+                  className="cursor-pointer hover:bg-zinc-600/50"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {patient.id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {patient.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {new Date(patient.createdAt).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (selectedTable === "seizures") {
+      return (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-zinc-600">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Duration
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Notes
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-600">
+              {seizures.map((seizure) => (
+                <tr
+                  key={seizure.date}
+                  onClick={() => {
+                    setSelectedItem(seizure);
+                    setIsModalOpen(true);
+                  }}
+                  className="cursor-pointer hover:bg-zinc-600/50"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {`${formatPacificDateTime(seizure.date).dateStr} ${formatPacificDateTime(seizure.date).timeStr}`}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {seizure.duration}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {seizure.notes}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (selectedTable === "medicationChanges") {
+      return (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-zinc-600">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Medication
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Dosage
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider">
+                  Notes
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-600">
+              {medicationChanges.map((change) => (
+                <tr
+                  key={`${change.date}-${change.medication}`}
+                  onClick={() => {
+                    setSelectedItem(change);
+                    setIsModalOpen(true);
+                  }}
+                  className="cursor-pointer hover:bg-zinc-600/50"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {`${formatPacificDateTime(change.date).dateStr} ${formatPacificDateTime(change.date).timeStr}`}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {change.medication}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {change.type}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {change.dosage}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-300">
+                    {change.notes}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+  };
+
+  const isLoading =
+    isLoadingPatients || isLoadingSeizures || isLoadingMedChanges;
+
+  return (
+    <div className="bg-zinc-700 rounded-lg p-6">
+      <h2 className="text-lg font-semibold mb-4">Data Explorer</h2>
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => setSelectedTable("patients")}
+          className={`px-4 py-2 rounded ${
+            selectedTable === "patients"
+              ? "bg-indigo-600 text-white"
+              : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
+          }`}
+        >
+          Patients
+        </button>
+        <button
+          onClick={() => setSelectedTable("seizures")}
+          className={`px-4 py-2 rounded ${
+            selectedTable === "seizures"
+              ? "bg-indigo-600 text-white"
+              : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
+          }`}
+        >
+          Seizures
+        </button>
+        <button
+          onClick={() => setSelectedTable("medicationChanges")}
+          className={`px-4 py-2 rounded ${
+            selectedTable === "medicationChanges"
+              ? "bg-indigo-600 text-white"
+              : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
+          }`}
+        >
+          Medication Changes
+        </button>
+      </div>
+      {isLoading ? (
+        <div className="text-center py-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mx-auto" />
+          <p className="mt-2 text-zinc-300">Loading data...</p>
+        </div>
+      ) : (
+        renderTableData()
+      )}
+      <DetailModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedItem(null);
+        }}
+        data={selectedItem}
+        title={`${selectedTable.charAt(0).toUpperCase() + selectedTable.slice(1)} Details`}
+      />
+    </div>
+  );
+}
 
 export default function ClientSettings() {
   const router = useRouter();
@@ -404,6 +698,8 @@ export default function ClientSettings() {
               </div>
             </div>
           </div>
+
+          <DataExplorer />
         </div>
       </div>
     </div>
