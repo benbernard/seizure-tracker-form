@@ -15,6 +15,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  ReferenceArea,
 } from "recharts";
 import {
   createMedicationChange,
@@ -113,8 +114,15 @@ function SeizureChart({
 }) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null);
+  const [refAreaRight, setRefAreaRight] = useState<string | null>(null);
+  const [zoomedDomain, setZoomedDomain] = useState<{
+    start: string;
+    end: string;
+  } | null>(null);
   const expandButtonRef = useRef<HTMLButtonElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
+
   // Sort medication changes by date
   const sortedChanges = [...medicationChanges].sort((a, b) => a.date - b.date);
 
@@ -129,6 +137,52 @@ function SeizureChart({
       medicationChanges: changesOnDate.length > 0 ? changesOnDate : undefined,
     };
   });
+
+  const handleMouseDown = (e: { activeLabel?: string }) => {
+    if (!e?.activeLabel) return;
+    // Prevent text selection
+    document.body.style.userSelect = "none";
+    setRefAreaLeft(e.activeLabel);
+  };
+
+  const handleMouseMove = (e: {
+    activeLabel?: string;
+    preventDefault?: () => void;
+  }) => {
+    if (!e?.activeLabel) return;
+    if (refAreaLeft) {
+      e.preventDefault?.();
+      setRefAreaRight(e.activeLabel);
+    }
+  };
+
+  const handleMouseUp = () => {
+    // Re-enable text selection
+    document.body.style.userSelect = "";
+
+    if (!refAreaLeft || !refAreaRight) {
+      setRefAreaLeft(null);
+      setRefAreaRight(null);
+      return;
+    }
+
+    // Ensure left is before right
+    const [start, end] = [refAreaLeft, refAreaRight].sort();
+    setZoomedDomain({ start, end });
+
+    setRefAreaLeft(null);
+    setRefAreaRight(null);
+  };
+
+  const resetZoom = () => {
+    setZoomedDomain(null);
+  };
+
+  const displayData = zoomedDomain
+    ? enrichedData.filter(
+        (d) => d.date >= zoomedDomain.start && d.date <= zoomedDomain.end,
+      )
+    : enrichedData;
 
   const handleDownload = async () => {
     if (!chartRef.current) return;
@@ -153,19 +207,23 @@ function SeizureChart({
   const chartContent = (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart
-        data={enrichedData}
+        data={displayData}
         margin={{
           top: 80,
           right: 80,
           left: 10,
           bottom: 30,
         }}
-        onMouseMove={(data) => {
-          if (data?.activePayload?.[0]?.payload?.date) {
-            setHoveredDate(data.activePayload[0].payload.date);
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          setHoveredDate(null);
+          if (refAreaLeft) {
+            setRefAreaLeft(null);
+            setRefAreaRight(null);
           }
         }}
-        onMouseLeave={() => setHoveredDate(null)}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#444" />
         <XAxis
@@ -175,6 +233,7 @@ function SeizureChart({
           textAnchor="end"
           height={70}
           tick={{ fill: "#fff" }}
+          allowDataOverflow
         />
         <YAxis stroke="#fff" tick={{ fill: "#fff" }} allowDecimals={false} />
         <Tooltip
@@ -255,16 +314,48 @@ function SeizureChart({
           dot={dotSize ? { fill: "#22c55e", r: dotSize } : false}
           name="Seizures"
         />
+        {refAreaLeft && refAreaRight && (
+          <ReferenceArea
+            x1={refAreaLeft}
+            x2={refAreaRight}
+            fill="#22c55e"
+            fillOpacity={0.1}
+            stroke="#22c55e"
+            strokeOpacity={0.3}
+          />
+        )}
       </LineChart>
     </ResponsiveContainer>
   );
 
   return (
     <>
-      <div className="mt-8 h-[450px] w-full rounded-lg border border-zinc-600 bg-zinc-900/50 p-4">
+      <div className="mt-8 h-[450px] w-full rounded-lg border border-zinc-600 bg-zinc-900/50 p-4 select-none">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">{title}</h2>
           <div className="flex gap-2">
+            {zoomedDomain && (
+              <button
+                onClick={resetZoom}
+                className="text-gray-400 hover:text-gray-300 transition-colors"
+                title="Reset zoom"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            )}
             <button
               onClick={handleDownload}
               className="text-gray-400 hover:text-gray-300 transition-colors"
