@@ -10,9 +10,25 @@ export default function SettingsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push("/sign-in?redirect_url=/settings");
-    }
+    const checkAuth = async () => {
+      if (!isLoaded || !isSignedIn) {
+        router.push("/sign-in?redirect_url=/settings");
+        return;
+      }
+
+      // Check if user is in allowlist
+      try {
+        const response = await fetch("/api/check-auth");
+        if (!response.ok) {
+          router.push("/unauthorized");
+        }
+      } catch (error) {
+        console.error("Auth check failed:", error);
+        router.push("/unauthorized");
+      }
+    };
+
+    checkAuth();
   }, [isLoaded, isSignedIn, router]);
 
   if (!isLoaded || !isSignedIn) {
