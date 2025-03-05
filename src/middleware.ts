@@ -20,6 +20,12 @@ export default clerkMiddleware(
   async (authPromise: ClerkMiddlewareAuth, req: NextRequest) => {
     devLog("Middleware executing for:", req.nextUrl.pathname);
 
+    // Skip authentication for the seizure API endpoint
+    if (req.nextUrl.pathname === "/api/seizure") {
+      devLog("Skipping auth for seizure API endpoint");
+      return NextResponse.next();
+    }
+
     const auth = await authPromise();
     const { userId } = auth;
 
@@ -65,14 +71,7 @@ export default clerkMiddleware(
   },
 );
 
-// Configure middleware matcher to protect both settings and API routes,
-// but exclude the seizure API endpoint so it can be accessed without authentication
+// Configure middleware matcher to protect settings routes
 export const config = {
-  matcher: [
-    "/settings/:path*",
-    {
-      source: "/api/:path*",
-      not: ["/api/seizure"],
-    },
-  ],
+  matcher: ["/settings/:path*", "/api/:path*"],
 };
