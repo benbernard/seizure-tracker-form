@@ -65,7 +65,14 @@ export default clerkMiddleware(
   },
 );
 
-// Configure middleware matcher to protect both settings and API routes
+// Configure middleware matcher to protect both settings and API routes,
+// but exclude the seizure API endpoint so it can be accessed without authentication
 export const config = {
-  matcher: ["/settings/:path*", "/api/:path*"],
+  matcher: [
+    "/settings/:path*",
+    {
+      source: "/api/:path*",
+      not: ["/api/seizure"],
+    },
+  ],
 };
