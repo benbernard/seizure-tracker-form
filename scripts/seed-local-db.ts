@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { BatchWriteCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import {
   PATIENTS_TABLE,
@@ -6,6 +5,7 @@ import {
   SETTINGS_TABLE,
 } from "../src/lib/aws/confs";
 import type { Patient, Seizure, Settings } from "../src/lib/aws/schema";
+import { generateUniquePatientId } from "../src/lib/utils/slug";
 import { createDynamoClient, runScript } from "./utils";
 
 const LOCAL_USER_ID = process.env.LOCAL_AUTH_USER_ID || "local-user";
@@ -37,10 +37,10 @@ async function main() {
   const client = createDynamoClient();
 
   const patient: Patient = {
-    id: randomUUID(),
+    id: generateUniquePatientId("Local Patient", new Set()),
     name: "Local Patient",
     ownerId: LOCAL_USER_ID,
-    allowedUserIds: [],
+    allowedUserIds: [LOCAL_USER_ID],
     createdAt: Date.now(),
   };
 
