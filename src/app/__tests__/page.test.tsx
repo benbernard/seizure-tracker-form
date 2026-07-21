@@ -1,4 +1,7 @@
 jest.mock("@/lib/clerk", () => ({ auth: jest.fn() }));
+jest.mock("next/headers", () => ({
+  cookies: jest.fn(),
+}));
 jest.mock("next/navigation", () => ({
   redirect: jest.fn((url: string) => {
     throw new Error(`REDIRECT:${url}`);
@@ -10,6 +13,7 @@ jest.mock("next/navigation", () => ({
 jest.mock("@/app/actions", () => ({
   getPublicPatient: jest.fn(),
   getTodaySeizuresPublic: jest.fn(),
+  getSettings: jest.fn(),
 }));
 jest.mock("@tanstack/react-query", () => ({
   useQuery: jest.fn((options: { initialData?: unknown }) => ({
@@ -26,20 +30,48 @@ jest.mock("next/link", () => {
   };
 });
 
-import { getPublicPatient, getTodaySeizuresPublic } from "@/app/actions";
+import {
+  getPublicPatient,
+  getSettings,
+  getTodaySeizuresPublic,
+} from "@/app/actions";
 import { auth } from "@/lib/clerk";
 import { render, screen } from "@testing-library/react";
+import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import PatientPage from "../p/[patientId]/page";
 import Home from "../page";
 
 const mockAuth = auth as unknown as jest.Mock;
+const mockCookies = cookies as jest.Mock;
+const mockGetSettings = getSettings as jest.Mock;
 const mockGetPublicPatient = jest.mocked(getPublicPatient);
 const mockGetTodaySeizuresPublic = jest.mocked(getTodaySeizuresPublic);
 
+function mockCookieStore(value?: string) {
+  mockCookies.mockReturnValue({
+    get: jest.fn((name: string) =>
+      name === "lastPatientId" ? { value } : undefined,
+    ),
+  });
+}
+
 describe("Home page", () => {
-  test("redirects signed-in users to settings", async () => {
+  test("redirects signed-in users to last patient from cookie", async () => {
     mockAuth.mockResolvedValue({ userId: "user_1" });
+    mockCookieStore("pat1");
+
+    await expect(Home()).rejects.toThrow("REDIRECT:/p/pat1");
+    expect(redirect).toHaveBeenCalledWith("/p/pat1");
+  });
+
+  test("redirects signed-in users to settings when no last patient", async () => {
+    mockAuth.mockResolvedValue({ userId: "user_1" });
+    mockCookieStore();
+    mockGetSettings.mockResolvedValue({
+      id: "user_1",
+      currentPatientId: undefined,
+    });
 
     await expect(Home()).rejects.toThrow("REDIRECT:/settings");
     expect(redirect).toHaveBeenCalledWith("/settings");

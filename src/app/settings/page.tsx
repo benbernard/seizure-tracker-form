@@ -1,22 +1,25 @@
-"use client";
-
-import { useAuth } from "@/lib/clerk-client";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { getSettings } from "@/app/actions";
+import { auth } from "@/lib/clerk";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import ClientSettings from "./ClientSettings";
 
-export default function SettingsPage() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const router = useRouter();
+export default async function SettingsPage() {
+  const { userId } = await auth();
+  if (!userId) {
+    redirect("/sign-in?redirect_url=/settings");
+  }
 
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push("/sign-in?redirect_url=/settings");
-    }
-  }, [isLoaded, isSignedIn, router]);
+  const cookieStore = await cookies();
+  const lastPatientId = cookieStore.get("lastPatientId")?.value;
 
-  if (!isLoaded || !isSignedIn) {
-    return <div className="p-4">Loading...</div>;
+  if (lastPatientId) {
+    redirect(`/p/${lastPatientId}/settings`);
+  }
+
+  const settings = await getSettings();
+  if (settings.currentPatientId) {
+    redirect(`/p/${settings.currentPatientId}/settings`);
   }
 
   return <ClientSettings />;

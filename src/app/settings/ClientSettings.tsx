@@ -1,6 +1,11 @@
 "use client";
 
-import type { MedicationChange, Patient, Seizure } from "@/lib/aws/schema";
+import type {
+  MedicationChange,
+  Patient,
+  Seizure,
+  Settings,
+} from "@/lib/aws/schema";
 import { SignOutButton } from "@/lib/clerk-client";
 import { copyText } from "@/lib/utils/clipboard";
 import { formatPacificDateTime } from "@/lib/utils/dates";
@@ -347,13 +352,13 @@ function HistoryMedsLink({ patientId }: { patientId?: string | null }) {
     );
   }
 
-  const fullUrl = `${origin}/graphs`;
+  const fullUrl = `${origin}/p/${patientId}/graphs`;
 
   return (
     <AccessCard
       title="History &amp; Meds"
       description="Charts and medication changes for this patient"
-      url="/graphs"
+      url={`/p/${patientId}/graphs`}
       copyUrl={fullUrl}
       copyLabel="Copy history and medication link"
       openLabel="Open history and medication page"
@@ -808,19 +813,36 @@ function DataExplorer() {
   );
 }
 
-export default function ClientSettings() {
+export default function ClientSettings({
+  patientId: propPatientId,
+}: {
+  patientId?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const {
-    data: settings,
-    isLoading,
-    isError,
-    error,
+    data: settingsData,
+    isLoading: isLoadingSettings,
+    isError: isSettingsError,
+    error: settingsError,
   } = useQuery({
     queryKey: ["settings"],
     queryFn: getSettings,
     refetchOnWindowFocus: true,
+    enabled: !propPatientId,
   });
+
+  const settings: Settings = settingsData ?? {
+    id: "",
+    currentPatientId: propPatientId,
+    updatedAt: 0,
+  };
+
+  const isLoading = !propPatientId && isLoadingSettings;
+  const isError = !propPatientId && isSettingsError;
+  const error = !propPatientId ? settingsError : null;
+
+  const currentPatientId = propPatientId ?? settings?.currentPatientId;
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -862,12 +884,10 @@ export default function ClientSettings() {
     }
   };
 
-  const currentPatient = patients.find(
-    (p) => p.id === settings?.currentPatientId,
-  );
+  const currentPatient = patients.find((p) => p.id === currentPatientId);
 
   const handleDeleteAll = async () => {
-    if (!settings?.currentPatientId) {
+    if (!currentPatientId) {
       toast.error("No patient selected");
       return;
     }
@@ -882,7 +902,7 @@ export default function ClientSettings() {
 
     try {
       setIsDeleting(true);
-      const result = await deleteAllSeizures(settings.currentPatientId);
+      const result = await deleteAllSeizures(currentPatientId);
       if (result.error) {
         toast.error(result.error);
       } else {
@@ -916,8 +936,20 @@ export default function ClientSettings() {
         toast.success(`Patient "${currentPatient.name}" archived`);
         setShowDeletePatientModal(false);
         setDeletePatientConfirmName("");
-        queryClient.invalidateQueries({ queryKey: ["patients"] });
-        queryClient.invalidateQueries({ queryKey: ["settings"] });
+
+        const updatedPatients = (await refetchPatients()).data ?? [];
+        if (currentPatientId === currentPatient.id) {
+          const nextPatientId = updatedPatients[0]?.id;
+          if (nextPatientId && nextPatientId !== currentPatientId) {
+            router.push(`/p/${nextPatientId}/settings`);
+          } else {
+            queryClient.invalidateQueries({ queryKey: ["patients"] });
+            queryClient.invalidateQueries({ queryKey: ["settings"] });
+          }
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["patients"] });
+          queryClient.invalidateQueries({ queryKey: ["settings"] });
+        }
       }
     } catch (error) {
       console.error("Error archiving patient:", error);
@@ -933,7 +965,7 @@ export default function ClientSettings() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!settings?.currentPatientId) {
+    if (!currentPatientId) {
       toast.error("No patient selected");
       return;
     }
@@ -941,10 +973,7 @@ export default function ClientSettings() {
     try {
       setIsUploading(true);
       const text = await file.text();
-      const result = await uploadSeizuresFromCSV(
-        settings.currentPatientId,
-        text,
-      );
+      const result = await uploadSeizuresFromCSV(currentPatientId, text);
 
       if (result.error) {
         toast.error(result.error);
@@ -969,7 +998,7 @@ export default function ClientSettings() {
     return <div className="p-4">Loading settings...</div>;
   }
 
-  if (isError || !settings) {
+  if (isError || (!propPatientId && !settings)) {
     return (
       <div className="p-4 text-red-500">
         Error loading settings:{" "}
@@ -1092,18 +1121,18 @@ export default function ClientSettings() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-zinc-800 rounded-lg p-4">
-                    <PublicPatientLink patientId={settings.currentPatientId} />
+                    <PublicPatientLink patientId={currentPatientId} />
                   </div>
                   <div className="bg-zinc-800 rounded-lg p-4">
-                    <HistoryMedsLink patientId={settings.currentPatientId} />
+                    <HistoryMedsLink patientId={currentPatientId} />
                   </div>
                 </div>
               </div>
-              {settings.currentPatientId && (
+              {currentPatientId && (
                 <QuickButtonSettings
-                  patientId={settings.currentPatientId}
+                  patientId={currentPatientId}
                   seconds={
-                    patients.find((p) => p.id === settings.currentPatientId)
+                    patients.find((p) => p.id === currentPatientId)
                       ?.quickButtonSeconds
                   }
                   onUpdate={() => {}}
@@ -1112,9 +1141,9 @@ export default function ClientSettings() {
             </div>
           </div>
 
-          {settings?.currentPatientId && (
+          {currentPatientId && (
             <PatientOwnerManagement
-              patientId={settings.currentPatientId}
+              patientId={currentPatientId}
               patients={patients}
               onUpdate={() => {
                 queryClient.invalidateQueries({ queryKey: ["patients"] });

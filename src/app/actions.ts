@@ -168,6 +168,10 @@ export async function updateSettings({
     await docClient.send(command);
     revalidatePath("/settings");
     revalidatePath("/graphs");
+    if (currentPatientId) {
+      revalidatePath(`/p/${currentPatientId}/settings`);
+      revalidatePath(`/p/${currentPatientId}/graphs`);
+    }
     return { success: true };
   } catch (error) {
     console.error("Error updating settings:", error);
@@ -195,6 +199,8 @@ export async function updateCurrentPatient(patientId: string) {
     revalidatePath("/");
     revalidatePath("/settings");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/settings`);
+    revalidatePath(`/p/${patientId}/graphs`);
   } catch (error) {
     console.error("Error updating current patient:", error);
     throw new Error("Failed to update current patient");
@@ -273,6 +279,7 @@ export async function addPatientOwner(patientId: string, ownerEmail: string) {
 
     await docClient.send(command);
     revalidatePath("/settings");
+    revalidatePath(`/p/${patientId}/settings`);
     return { success: true };
   } catch (error) {
     console.error("Error adding patient owner:", error);
@@ -313,6 +320,7 @@ export async function removePatientOwner(
 
     await docClient.send(command);
     revalidatePath("/settings");
+    revalidatePath(`/p/${patientId}/settings`);
     return { success: true };
   } catch (error) {
     console.error("Error removing patient owner:", error);
@@ -380,6 +388,7 @@ export async function updatePatientQuickButtons(
     await docClient.send(command);
     revalidatePath("/settings");
     revalidatePath(`/p/${patientId}`);
+    revalidatePath(`/p/${patientId}/settings`);
     return { success: true, quickButtonSeconds: validSeconds };
   } catch (error) {
     console.error("Error updating quick buttons:", error);
@@ -475,6 +484,7 @@ export async function submitSeizure(
     await docClient.send(command);
     revalidatePath("/");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/graphs`);
     return { success: true };
   } catch (error) {
     console.error("Error creating seizure:", error);
@@ -540,6 +550,7 @@ export async function deleteAllSeizures(patientId: string) {
     console.log(`Deletion complete. ${deletedCount} seizures deleted.`);
     revalidatePath("/");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/graphs`);
     return { success: true, count: deletedCount };
   } catch (error) {
     console.error("Error deleting seizures:", error);
@@ -563,6 +574,8 @@ export async function archivePatient(patientId: string) {
     revalidatePath("/");
     revalidatePath("/settings");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/settings`);
+    revalidatePath(`/p/${patientId}/graphs`);
     return { success: true };
   } catch (error) {
     console.error("Error archiving patient:", error);
@@ -743,6 +756,7 @@ export async function uploadSeizuresFromCSV(
 
     revalidatePath("/");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/graphs`);
     return {
       success: true,
       totalRows: dataRows.length,
@@ -800,6 +814,8 @@ export async function createMedicationChange(
     });
 
     await docClient.send(command);
+    revalidatePath("/graphs");
+    revalidatePath(`/p/${medicationChange.id}/graphs`);
     return { success: true };
   } catch (error) {
     console.error("Error creating medication change:", error);
@@ -822,6 +838,7 @@ export async function deleteMedicationChange(patientId: string, date: number) {
     await docClient.send(command);
     revalidatePath("/");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/graphs`);
     return { success: true };
   } catch (error) {
     console.error("Error deleting medication change:", error);
@@ -859,6 +876,7 @@ export async function deleteSeizure(patientId: string, date: number) {
     await docClient.send(deleteCommand);
     revalidatePath("/");
     revalidatePath("/graphs");
+    revalidatePath(`/p/${patientId}/graphs`);
     return { success: true };
   } catch (error) {
     console.error("Error deleting seizure:", error);

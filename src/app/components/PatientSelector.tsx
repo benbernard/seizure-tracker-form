@@ -37,7 +37,7 @@ export default function PatientSelector({
     try {
       await updateCurrentPatient(patientId);
       toast.success("Patient updated successfully");
-      router.refresh();
+      router.push(`/p/${patientId}/settings`);
     } catch (error) {
       console.error("Error updating patient:", error);
       toast.error("Failed to update patient");

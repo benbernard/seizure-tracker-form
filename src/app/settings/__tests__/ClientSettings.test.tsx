@@ -83,7 +83,10 @@ function setupQuery(settings?: unknown, patients?: unknown, owners?: unknown) {
       return { data: settings, isLoading: false, isError: false, error: null };
     }
     if (key[0] === "patients") {
-      return { data: patients || [], refetch: jest.fn() };
+      return {
+        data: patients || [],
+        refetch: jest.fn(() => Promise.resolve({ data: patients || [] })),
+      };
     }
     if (key[0] === "patientOwners") {
       return {
@@ -149,7 +152,7 @@ describe("ClientSettings", () => {
     const link = screen.getByRole("link", {
       name: "Open history and medication page",
     });
-    expect(link).toHaveAttribute("href", "/graphs");
+    expect(link).toHaveAttribute("href", "/p/pat1/graphs");
   });
 
   test("shows a message instead of the public link when no patient is selected", () => {

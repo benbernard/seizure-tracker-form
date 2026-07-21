@@ -1,4 +1,6 @@
+import { getSettings } from "@/app/actions";
 import { auth } from "@/lib/clerk";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -6,6 +8,18 @@ export default async function Home() {
   const { userId } = await auth();
 
   if (userId) {
+    const cookieStore = await cookies();
+    const lastPatientId = cookieStore.get("lastPatientId")?.value;
+
+    if (lastPatientId) {
+      redirect(`/p/${lastPatientId}`);
+    }
+
+    const settings = await getSettings();
+    if (settings.currentPatientId) {
+      redirect(`/p/${settings.currentPatientId}`);
+    }
+
     redirect("/settings");
   }
 

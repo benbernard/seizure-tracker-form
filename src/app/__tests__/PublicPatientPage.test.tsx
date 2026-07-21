@@ -143,7 +143,7 @@ describe("PublicPatientPage", () => {
 
     expect(
       screen.getByRole("link", { name: "History and medication" }),
-    ).toHaveAttribute("href", "/graphs");
+    ).toHaveAttribute("href", "/p/pat1/graphs");
   });
 
   test("shows sign in link when not signed in", () => {
@@ -177,7 +177,7 @@ describe("PublicPatientPage", () => {
 
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
       "href",
-      "/settings",
+      "/p/pat1/settings",
     );
   });
 

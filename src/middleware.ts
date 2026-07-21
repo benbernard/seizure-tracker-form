@@ -44,7 +44,19 @@ export async function middlewareHandler(
 
   if (isPublicPath(pathname)) {
     devLog("Public path, skipping auth");
-    return NextResponse.next();
+    const response = NextResponse.next();
+    if (pathname.startsWith("/p/")) {
+      const segments = pathname.split("/");
+      const patientId = segments[2];
+      if (patientId) {
+        response.cookies.set("lastPatientId", patientId, {
+          maxAge: 60 * 60 * 24 * 365 * 10, // 10 years
+          path: "/",
+          sameSite: "lax",
+        });
+      }
+    }
+    return response;
   }
 
   const auth = await authPromise();

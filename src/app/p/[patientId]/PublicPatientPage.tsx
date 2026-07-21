@@ -23,13 +23,13 @@ function SubmitButton() {
   );
 }
 
-function AdminLink() {
+function AdminLink({ patientId }: { patientId: string }) {
   const { isSignedIn } = useAuth();
 
   if (isSignedIn) {
     return (
       <Link
-        href="/settings"
+        href={`/p/${patientId}/settings`}
         className="text-sm text-blue-400 hover:text-blue-300"
       >
         Settings
@@ -160,7 +160,7 @@ export default function PublicPatientPage({
               {patientName} Seizure Tracker
             </h1>
             <div className="absolute right-0 -top-1 flex items-center gap-2">
-              <AdminLink />
+              <AdminLink patientId={patientId} />
             </div>
           </div>
 
@@ -219,7 +219,7 @@ export default function PublicPatientPage({
                 Today&apos;s Seizures ({seizures.length})
               </h2>
               <Link
-                href="/graphs"
+                href={`/p/${patientId}/graphs`}
                 className="text-gray-400 hover:text-white transition-colors"
                 aria-label="History and medication"
               >

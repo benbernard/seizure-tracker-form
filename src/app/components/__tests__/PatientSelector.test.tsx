@@ -3,14 +3,17 @@ jest.mock("../../actions", () => ({
   updateCurrentPatient: jest.fn(),
 }));
 
+const mockPush = jest.fn();
+
 jest.mock("next/navigation", () => ({
-  useRouter: jest.fn(() => ({ refresh: jest.fn() })),
+  useRouter: jest.fn(() => ({ push: mockPush })),
 }));
 
 jest.mock("react-toastify", () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
 
+import { useQueryClient } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { getPatients, updateCurrentPatient } from "../../actions";
@@ -86,6 +89,7 @@ describe("PatientSelector", () => {
 
     await waitFor(() => {
       expect(updateCurrentPatient).toHaveBeenCalledWith("pat2");
+      expect(mockPush).toHaveBeenCalledWith("/p/pat2/settings");
     });
   });
 

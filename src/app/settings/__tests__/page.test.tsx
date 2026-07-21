@@ -1,46 +1,71 @@
-jest.mock("@/lib/clerk-client", () => ({
-  useAuth: jest.fn(),
-  SignOutButton: ({ children }: { children: React.ReactNode }) => children,
+jest.mock("@/lib/clerk", () => ({ auth: jest.fn() }));
+jest.mock("next/headers", () => ({
+  cookies: jest.fn(),
 }));
 jest.mock("next/navigation", () => ({
-  useRouter: jest.fn(() => ({ push: jest.fn() })),
+  redirect: jest.fn((url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  }),
 }));
-jest.mock("../ClientSettings", () => ({
-  __esModule: true,
-  default: function MockClientSettings() {
-    return <div data-testid="client-settings">ClientSettings</div>;
-  },
+jest.mock("@/app/actions", () => ({
+  getSettings: jest.fn(),
 }));
 
-import { useAuth } from "@/lib/clerk-client";
-import { render, screen } from "@testing-library/react";
-import { useRouter } from "next/navigation";
+import { getSettings } from "@/app/actions";
+import { auth } from "@/lib/clerk";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import SettingsPage from "../page";
 
-const mockUseAuth = useAuth as jest.Mock;
-const mockUseRouter = useRouter as jest.Mock;
+const mockAuth = auth as jest.Mock;
+const mockCookies = cookies as jest.Mock;
+const mockGetSettings = getSettings as jest.Mock;
+
+function mockCookieStore(value?: string) {
+  mockCookies.mockReturnValue({
+    get: jest.fn((name: string) =>
+      name === "lastPatientId" ? { value } : undefined,
+    ),
+  });
+}
 
 describe("Settings page", () => {
-  test("shows loading while auth state is loading", () => {
-    mockUseAuth.mockReturnValue({ isLoaded: false, isSignedIn: false });
+  test("redirects to sign-in when user is not signed in", async () => {
+    mockAuth.mockResolvedValue({ userId: null });
 
-    render(<SettingsPage />);
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    await expect(SettingsPage()).rejects.toThrow("REDIRECT:/sign-in");
+    expect(redirect).toHaveBeenCalledWith("/sign-in?redirect_url=/settings");
   });
 
-  test("redirects to sign-in when user is not signed in", () => {
-    const push = jest.fn();
-    mockUseRouter.mockReturnValue({ push });
-    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
+  test("redirects to last patient settings from cookie", async () => {
+    mockAuth.mockResolvedValue({ userId: "user_1" });
+    mockCookieStore("pat1");
 
-    render(<SettingsPage />);
-    expect(push).toHaveBeenCalledWith("/sign-in?redirect_url=/settings");
+    await expect(SettingsPage()).rejects.toThrow("REDIRECT:/p/pat1/settings");
+    expect(redirect).toHaveBeenCalledWith("/p/pat1/settings");
   });
 
-  test("renders client settings when signed in", () => {
-    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
+  test("redirects to current patient settings from settings", async () => {
+    mockAuth.mockResolvedValue({ userId: "user_1" });
+    mockCookieStore();
+    mockGetSettings.mockResolvedValue({
+      id: "user_1",
+      currentPatientId: "pat2",
+    });
 
-    render(<SettingsPage />);
-    expect(screen.getByTestId("client-settings")).toBeInTheDocument();
+    await expect(SettingsPage()).rejects.toThrow("REDIRECT:/p/pat2/settings");
+    expect(redirect).toHaveBeenCalledWith("/p/pat2/settings");
+  });
+
+  test("renders client settings when no patient is known", async () => {
+    mockAuth.mockResolvedValue({ userId: "user_1" });
+    mockCookieStore();
+    mockGetSettings.mockResolvedValue({
+      id: "user_1",
+      currentPatientId: undefined,
+    });
+
+    const element = await SettingsPage();
+    expect(element).toBeDefined();
   });
 });

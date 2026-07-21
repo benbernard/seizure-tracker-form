@@ -32,7 +32,7 @@ jest.mock("@/app/actions", () => ({
 import { useQuery } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { usePatientId } from "../../components/PatientContext";
-import GraphsPage from "../page";
+import { GraphsContent } from "../GraphsContent";
 
 const mockUseQuery = useQuery as jest.Mock;
 const mockUsePatientId = usePatientId as jest.Mock;
@@ -55,7 +55,7 @@ describe("Graphs page", () => {
   test("shows message when no patient is selected", () => {
     mockUsePatientId.mockReturnValue(undefined);
 
-    render(<GraphsPage />);
+    render(<GraphsContent />);
     expect(screen.getByText("No Patient Selected")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Go to Settings" }),
@@ -66,17 +66,27 @@ describe("Graphs page", () => {
     mockUsePatientId.mockReturnValue(undefined);
     mockUseQuery.mockReturnValue({ data: undefined, isLoading: true });
 
-    render(<GraphsPage />);
+    render(<GraphsContent />);
     expect(document.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
   test("back button goes to the current patient's public page", () => {
     mockUsePatientId.mockReturnValue("pat1");
 
-    render(<GraphsPage />);
+    render(<GraphsContent />);
     expect(screen.getByRole("link", { name: "Back" })).toHaveAttribute(
       "href",
       "/p/pat1",
+    );
+  });
+
+  test("uses patientId prop when provided", () => {
+    mockUsePatientId.mockReturnValue(undefined);
+
+    render(<GraphsContent patientId="pat2" />);
+    expect(screen.getByRole("link", { name: "Back" })).toHaveAttribute(
+      "href",
+      "/p/pat2",
     );
   });
 });
