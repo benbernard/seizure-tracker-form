@@ -109,7 +109,7 @@ async function findUserByEmail(email: string) {
 
 export async function getPublicPatient(patientId: string) {
   const patient = await getPatientById(patientId);
-  if (!patient) {
+  if (!patient || patient.archived) {
     return null;
   }
   return {
@@ -149,7 +149,7 @@ export async function submitSeizurePublic(
   notes?: string,
 ) {
   const patient = await getPatientById(patientId);
-  if (!patient) {
+  if (!patient || patient.archived) {
     return { error: "Patient not found" };
   }
 
@@ -451,24 +451,25 @@ export async function updatePatientQuickButtons(
   }
 }
 
+function patientIsVisible(patient: Patient): boolean {
+  return !patient.archived;
+}
+
 export async function getPatients() {
   try {
     const { userId, email } = await getCurrentUser();
-    if (isSuperUser(email)) {
-      const command = new ScanCommand({
-        TableName: PATIENTS_TABLE,
-      });
-      const response = await docClient.send(command);
-      return (response.Items as Patient[]) || [];
-    }
-
     const command = new ScanCommand({
       TableName: PATIENTS_TABLE,
     });
-
     const response = await docClient.send(command);
     const items = (response.Items as Patient[]) || [];
-    return items.filter((patient) => patientIsOwnedBy(patient, userId));
+    const visible = items.filter(patientIsVisible);
+
+    if (isSuperUser(email)) {
+      return visible;
+    }
+
+    return visible.filter((patient) => patientIsOwnedBy(patient, userId));
   } catch (error) {
     console.error("Error getting patients:", error);
     throw new Error("Failed to get patients");
@@ -607,6 +608,29 @@ export async function deleteAllSeizures(patientId: string) {
   } catch (error) {
     console.error("Error deleting seizures:", error);
     return { error: "Failed to delete seizures" };
+  }
+}
+
+export async function archivePatient(patientId: string) {
+  try {
+    await assertOwnsPatient(patientId);
+
+    await docClient.send(
+      new UpdateCommand({
+        TableName: PATIENTS_TABLE,
+        Key: { id: patientId },
+        UpdateExpression: "SET archived = :archived",
+        ExpressionAttributeValues: { ":archived": true },
+      }),
+    );
+
+    revalidatePath("/");
+    revalidatePath("/settings");
+    revalidatePath("/graphs");
+    return { success: true };
+  } catch (error) {
+    console.error("Error archiving patient:", error);
+    return { error: "Failed to archive patient" };
   }
 }
 

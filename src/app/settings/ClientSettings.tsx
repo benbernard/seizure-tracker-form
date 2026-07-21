@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   addPatientOwner,
+  archivePatient,
   createPatient,
   deleteAllSeizures,
   getPatientOwnerEmails,
@@ -826,6 +827,9 @@ export default function ClientSettings() {
   const [isCreatingPatient, setIsCreatingPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
+  const [showDeletePatientModal, setShowDeletePatientModal] = useState(false);
+  const [deletePatientConfirmName, setDeletePatientConfirmName] = useState("");
+  const [isArchivingPatient, setIsArchivingPatient] = useState(false);
 
   const { data: patients = [], refetch: refetchPatients } = useQuery({
     queryKey: ["patients"],
@@ -858,6 +862,10 @@ export default function ClientSettings() {
     }
   };
 
+  const currentPatient = patients.find(
+    (p) => p.id === settings?.currentPatientId,
+  );
+
   const handleDeleteAll = async () => {
     if (!settings?.currentPatientId) {
       toast.error("No patient selected");
@@ -885,6 +893,37 @@ export default function ClientSettings() {
       toast.error("Failed to delete seizures");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleArchivePatient = async () => {
+    if (!currentPatient) {
+      toast.error("No patient selected");
+      return;
+    }
+
+    if (deletePatientConfirmName.trim() !== currentPatient.name.trim()) {
+      toast.error("Patient name does not match");
+      return;
+    }
+
+    try {
+      setIsArchivingPatient(true);
+      const result = await archivePatient(currentPatient.id);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`Patient "${currentPatient.name}" archived`);
+        setShowDeletePatientModal(false);
+        setDeletePatientConfirmName("");
+        queryClient.invalidateQueries({ queryKey: ["patients"] });
+        queryClient.invalidateQueries({ queryKey: ["settings"] });
+      }
+    } catch (error) {
+      console.error("Error archiving patient:", error);
+      toast.error("Failed to archive patient");
+    } finally {
+      setIsArchivingPatient(false);
     }
   };
 
@@ -1211,12 +1250,78 @@ export default function ClientSettings() {
                   </label>
                 </div>
               </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">
+                    Archive patient
+                  </h3>
+                  <p className="text-zinc-400 text-xs">
+                    Hide the current patient from the app. Records are kept but
+                    the patient is no longer visible.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDeletePatientModal(true)}
+                  disabled={isArchivingPatient || !settings?.currentPatientId}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-75 disabled:cursor-not-allowed min-w-[140px] justify-center"
+                >
+                  Archive Patient
+                </button>
+              </div>
             </div>
           </div>
 
           <DataExplorer />
         </div>
       </div>
+
+      {showDeletePatientModal && currentPatient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-zinc-700 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Archive patient
+            </h3>
+            <p className="text-zinc-300 text-sm mb-4">
+              Type the patient name{" "}
+              <strong className="text-white">{currentPatient.name}</strong> to
+              confirm. The patient will be hidden from the app; records are
+              kept.
+            </p>
+            <input
+              type="text"
+              value={deletePatientConfirmName}
+              onChange={(e) => setDeletePatientConfirmName(e.target.value)}
+              placeholder="Patient name"
+              className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-white focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 mb-4"
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeletePatientModal(false);
+                  setDeletePatientConfirmName("");
+                }}
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-zinc-600 rounded-md hover:bg-zinc-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleArchivePatient}
+                disabled={
+                  isArchivingPatient ||
+                  deletePatientConfirmName.trim() !== currentPatient.name.trim()
+                }
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {isArchivingPatient ? "Archiving..." : "Archive Patient"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

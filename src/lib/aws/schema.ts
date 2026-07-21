@@ -17,6 +17,7 @@ export interface Patient {
   ownerId: string; // Clerk userId
   allowedUserIds?: string[]; // additional users who can manage this patient
   quickButtonSeconds?: number[]; // durations for the public quick-submit buttons
+  archived?: boolean; // soft-delete flag
   createdAt: number;
 }
 

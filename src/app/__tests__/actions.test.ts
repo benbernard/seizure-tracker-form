@@ -13,6 +13,7 @@ import { auth } from "@/lib/clerk";
 import type { clerkClient } from "@clerk/nextjs/server";
 import {
   addPatientOwner,
+  archivePatient,
   createMedicationChange,
   createPatient,
   deleteAllSeizures,
@@ -20,6 +21,7 @@ import {
   deleteSeizure,
   getPatientOwnerEmails,
   getPatients,
+  getPublicPatient,
   getSettings,
   getTodaySeizuresPublic,
   listMedicationChanges,
@@ -148,6 +150,7 @@ describe("seizure actions", () => {
     setCurrentUser(OWNER_ID);
     configureClerkMock();
     jest.spyOn(Date, "now").mockReturnValue(1707542775000);
+    process.env.SUPER_USER_EMAILS = undefined;
   });
 
   afterEach(() => {
@@ -553,6 +556,57 @@ describe("seizure actions", () => {
           isOwner: false,
         },
       ]);
+    });
+
+    test("archivePatient sets the archived flag and hides the patient", async () => {
+      seedPatient("pat1", OWNER_ID);
+
+      const result = await archivePatient("pat1");
+
+      expect(result).toEqual({ success: true });
+      const patient = getTable("patients").find((p) => p.id === "pat1");
+      expect(patient?.archived).toBe(true);
+      expect((await getPatients()).map((p) => p.id)).toEqual([]);
+    });
+
+    test("archivePatient does not affect other patients", async () => {
+      seedPatient("pat1", OWNER_ID);
+      seedPatient("pat2", OWNER_ID);
+
+      await archivePatient("pat1");
+
+      expect(
+        getTable("patients").find((p) => p.id === "pat2")?.archived,
+      ).toBeUndefined();
+      expect((await getPatients()).map((p) => p.id)).toEqual(["pat2"]);
+    });
+
+    test("non-owner cannot archive a patient", async () => {
+      seedPatient("pat1", OWNER_ID);
+      setCurrentUser(OTHER_USER_ID);
+
+      const result = await archivePatient("pat1");
+
+      expect(result).toEqual({ error: "Failed to archive patient" });
+      expect(
+        getTable("patients").find((p) => p.id === "pat1")?.archived,
+      ).toBeUndefined();
+    });
+
+    test("getPublicPatient returns null for archived patients", async () => {
+      seedPatient("pat1", OWNER_ID);
+      await archivePatient("pat1");
+
+      expect(await getPublicPatient("pat1")).toBeNull();
+    });
+
+    test("submitSeizurePublic rejects archived patients", async () => {
+      seedPatient("pat1", OWNER_ID);
+      await archivePatient("pat1");
+
+      const result = await submitSeizurePublic("pat1", "10", "note");
+
+      expect(result).toEqual({ error: "Patient not found" });
     });
   });
 
