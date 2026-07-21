@@ -1,23 +1,55 @@
 import { GetCommand, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { createClerkClient } from "@clerk/backend";
 import { PATIENTS_TABLE, SETTINGS_TABLE } from "../src/lib/aws/confs";
 import { createDynamoClient, runScript } from "./utils";
 
-function getOwnerUserId(): string {
+async function getOwnerUserId(): Promise<string> {
   const arg = process.argv[2];
-  const env = process.env.OWNER_USER_ID;
-  const ownerId = arg || env;
-  if (!ownerId) {
+  const envUserId = process.env.OWNER_USER_ID;
+  const envEmail = process.env.OWNER_EMAIL;
+  const secretKey = process.env.CLERK_SECRET_KEY;
+
+  if (arg) {
+    return arg;
+  }
+  if (envUserId) {
+    return envUserId;
+  }
+
+  const email = arg || envEmail;
+  if (!email) {
     console.error(
-      "Usage: OWNER_USER_ID=<clerk-user-id> npx ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/migrate-ownership.ts",
+      "Usage: OWNER_EMAIL=<email> npx ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/migrate-ownership.ts",
     );
-    console.error("Or pass the Clerk userId as the first argument.");
+    console.error("Or: OWNER_USER_ID=<clerk-user-id> ...");
+    console.error("Or pass the email or Clerk userId as the first argument.");
     process.exit(1);
   }
-  return ownerId;
+
+  if (!secretKey) {
+    console.error("CLERK_SECRET_KEY is required to look up a user by email");
+    process.exit(1);
+  }
+
+  const clerk = createClerkClient({ secretKey });
+  const { data } = await clerk.users.getUserList({
+    emailAddress: [email.toLowerCase().trim()],
+  });
+  if (data.length === 0) {
+    console.error(`No Clerk user found with email: ${email}`);
+    process.exit(1);
+  }
+  if (data.length > 1) {
+    console.error(`Multiple Clerk users found with email: ${email}`);
+    process.exit(1);
+  }
+
+  console.log(`Resolved ${email} to Clerk userId ${data[0].id}`);
+  return data[0].id;
 }
 
 async function main() {
-  const ownerUserId = getOwnerUserId();
+  const ownerUserId = await getOwnerUserId();
   const client = createDynamoClient();
 
   console.log(`Migrating ownership to user: ${ownerUserId}`);
