@@ -423,17 +423,31 @@ describe("seizure actions", () => {
   });
 
   describe("patient management", () => {
-    test("createPatient adds a patient owned by the current user", async () => {
+    test("createPatient adds a patient with a kebab ID and the creator as owner", async () => {
       const result = await createPatient("Alex");
 
       expect(result.error).toBeUndefined();
       expect(result.success).toBe(true);
       expect(result.patient).toMatchObject({
+        id: "alex",
         name: "Alex",
         ownerId: OWNER_ID,
-        allowedUserIds: [],
+        allowedUserIds: [OWNER_ID],
       });
       expect(getTable("patients")).toHaveLength(1);
+    });
+
+    test("createPatient appends a counter when the kebab ID already exists", async () => {
+      seedPatient("alex", OWNER_ID);
+
+      const result = await createPatient("Alex");
+
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.patient).toMatchObject({
+        id: "alex-2",
+        name: "Alex",
+      });
     });
 
     test("getPatients returns only patients the user owns or has access to", async () => {
@@ -444,6 +458,17 @@ describe("seizure actions", () => {
       const result = await getPatients();
 
       expect(result.map((p) => p.id)).toEqual(["pat1", "pat3"]);
+    });
+
+    test("super-user can see all patients", async () => {
+      process.env.SUPER_USER_EMAILS = "owner@example.com";
+      seedPatient("pat1", OWNER_ID);
+      seedPatient("pat2", OTHER_USER_ID);
+
+      const result = await getPatients();
+
+      expect(result.map((p) => p.id)).toEqual(["pat1", "pat2"]);
+      process.env.SUPER_USER_EMAILS = undefined;
     });
 
     test("unauthenticated user cannot get patients", async () => {

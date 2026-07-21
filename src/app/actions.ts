@@ -1,10 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import {
   assertOwnsPatient,
+  getCurrentUser,
   getCurrentUserId,
   getPatientById,
+  isSuperUser,
   patientIsOwnedBy,
 } from "@/lib/auth";
 import {
@@ -26,6 +27,7 @@ import {
   getCurrentUtcTimestamp,
   pacificToUtcTimestamp,
 } from "@/lib/utils/dates";
+import { generateUniquePatientId, slugify } from "@/lib/utils/slug";
 import {
   BatchWriteCommand,
   DeleteCommand,
@@ -262,17 +264,30 @@ export async function updateCurrentPatient(patientId: string) {
 export async function createPatient(name: string) {
   try {
     const userId = await getCurrentUserId();
+    const trimmedName = name.trim();
+
+    const existing = await docClient.send(
+      new ScanCommand({
+        TableName: PATIENTS_TABLE,
+        ProjectionExpression: "id",
+      }),
+    );
+    const existingIds = new Set(
+      (existing.Items ?? []).map((item) => String(item.id)),
+    );
+
     const patient: Patient = {
-      id: randomUUID(),
-      name: name.trim(),
+      id: generateUniquePatientId(trimmedName, existingIds),
+      name: trimmedName,
       ownerId: userId,
-      allowedUserIds: [],
+      allowedUserIds: [userId],
       createdAt: Date.now(),
     };
 
     const command = new PutCommand({
       TableName: PATIENTS_TABLE,
       Item: patient,
+      ConditionExpression: "attribute_not_exists(id)",
     });
 
     await docClient.send(command);
@@ -377,7 +392,9 @@ export async function getPatientOwnerEmails(patientId: string) {
       return { error: "Patient not found" };
     }
 
-    const userIds = [patient.ownerId, ...(patient.allowedUserIds ?? [])];
+    const userIds = [
+      ...new Set([patient.ownerId, ...(patient.allowedUserIds ?? [])]),
+    ];
     const users = await getUserDetails(userIds);
 
     return {
@@ -436,7 +453,15 @@ export async function updatePatientQuickButtons(
 
 export async function getPatients() {
   try {
-    const userId = await getCurrentUserId();
+    const { userId, email } = await getCurrentUser();
+    if (isSuperUser(email)) {
+      const command = new ScanCommand({
+        TableName: PATIENTS_TABLE,
+      });
+      const response = await docClient.send(command);
+      return (response.Items as Patient[]) || [];
+    }
+
     const command = new ScanCommand({
       TableName: PATIENTS_TABLE,
     });
@@ -889,11 +914,22 @@ export async function createDefaultPatientForUser(
   userId: string,
   name: string,
 ) {
+  const trimmedName = name.trim();
+  const existing = await docClient.send(
+    new ScanCommand({
+      TableName: PATIENTS_TABLE,
+      ProjectionExpression: "id",
+    }),
+  );
+  const existingIds = new Set(
+    (existing.Items ?? []).map((item) => String(item.id)),
+  );
+
   const patient: Patient = {
-    id: "kat",
-    name,
+    id: generateUniquePatientId(trimmedName, existingIds),
+    name: trimmedName,
     ownerId: userId,
-    allowedUserIds: [],
+    allowedUserIds: [userId],
     createdAt: Date.now(),
   };
 
@@ -903,4 +939,5 @@ export async function createDefaultPatientForUser(
   });
 
   await docClient.send(command);
+  return patient;
 }
