@@ -1,6 +1,6 @@
-import { DateTime } from "luxon";
 import type { Seizure } from "@/lib/aws/schema";
 import { formatPacificDateTime } from "@/lib/utils/dates";
+import { DateTime } from "luxon";
 
 export interface SeizureDataPoint {
   date: string;

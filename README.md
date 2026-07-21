@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Seizure Tracker
 
-## Getting Started
+A Next.js app for tracking seizures per patient. Data is stored in DynamoDB and authentication is handled by Clerk.
 
-First, run the development server:
+## Local development
+
+The local dev setup runs a local DynamoDB inside Docker and starts the Next.js app.
+
+1. Copy the example environment file:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. Start the local DynamoDB and Next.js server:
+
+   ```bash
+   npm run dev
+   ```
+
+   This will:
+
+   - Start the `dynamodb-local` container via Docker Compose.
+   - Wait for the database to be ready.
+   - Create the required tables (idempotent).
+   - Start the Next.js dev server with Turbopack.
+
+3. Seed the database with a sample patient and some seizures:
+
+   ```bash
+   npm run db:seed
+   ```
+
+   The seeded patient is owned by the `LOCAL_AUTH_USER_ID` value in `.env.local`.
+
+4. Open [http://localhost:3000](http://localhost:3000).
+
+### Other useful scripts
+
+- `npm run dev:app` — start Next.js without starting the local database.
+- `npm run dev:down` — stop the local database container.
+- `npm run dev:reset` — remove the local database volume and recreate the tables.
+- `npm run db:seed` — insert sample data into the local database.
+
+## Clerk-less local mode
+
+Set `LOCAL_AUTH_USER_ID` in `.env.local` to bypass Clerk entirely:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+LOCAL_AUTH_USER_ID=local-user
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+When this variable is set:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- The app treats the local user as signed in.
+- Clerk keys, `ClerkProvider`, `SignIn`, `SignUp`, and the middleware allowlist checks are skipped.
+- `/sign-in` and `/sign-up` redirect to `/settings`.
+- `SignOutButton` becomes a no-op button.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Remove or unset `LOCAL_AUTH_USER_ID` to use normal Clerk authentication.
 
-## Learn More
+## Production / real AWS
 
-To learn more about Next.js, take a look at the following resources:
+For production or shared AWS environments, set the real AWS credentials and remove `DYNAMODB_ENDPOINT` and `LOCAL_AUTH_USER_ID`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+AWS_REGION=...
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+# DYNAMODB_ENDPOINT=...  # leave unset to use AWS
+# LOCAL_AUTH_USER_ID=... # leave unset to use Clerk
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
+CLERK_SECRET_KEY=...
+```
 
-## Deploy on Vercel
+## Testing and checks
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment
+
+This is a standard Next.js application. Deploy on the platform of your choice (e.g. Vercel) with the production environment variables above.

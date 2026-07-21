@@ -1,24 +1,29 @@
 "use client";
 
+import type { MedicationChange, Patient, Seizure } from "@/lib/aws/schema";
+import { SignOutButton } from "@/lib/clerk-client";
+import { copyText } from "@/lib/utils/clipboard";
+import { formatPacificDateTime } from "@/lib/utils/dates";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
+  addPatientOwner,
+  createPatient,
   deleteAllSeizures,
+  getPatientOwnerEmails,
+  getPatients,
   getSettings,
+  listMedicationChanges,
+  listSeizures,
+  removePatientOwner,
+  updatePatientQuickButtons,
   updateSettings,
   uploadSeizuresFromCSV,
-  importSeizuresFromSheet,
-  getPatients,
-  listSeizures,
-  listMedicationChanges,
 } from "../actions";
-import type { Patient, Seizure, MedicationChange } from "@/lib/aws/schema";
 import PatientSelector from "../components/PatientSelector";
-import { FileSpreadsheet } from "lucide-react";
-import { formatPacificDateTime } from "@/lib/utils/dates";
-import { SignOutButton } from "@clerk/nextjs";
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -65,6 +70,477 @@ function DetailModal({ isOpen, onClose, data, title }: DetailModalProps) {
   );
 }
 
+interface PatientOwnerManagementProps {
+  patientId: string;
+  patients: Patient[];
+  onUpdate: () => void;
+}
+
+interface OwnerEntry {
+  userId: string;
+  email: string;
+  isCurrentUser: boolean;
+  isOwner: boolean;
+}
+
+export function PatientOwnerManagement({
+  patientId,
+  patients,
+  onUpdate,
+}: PatientOwnerManagementProps) {
+  const patient = patients.find((p) => p.id === patientId);
+  const [newOwnerEmail, setNewOwnerEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    data: ownerData,
+    isLoading,
+    refetch,
+  } = useQuery({
+    queryKey: ["patientOwners", patientId],
+    queryFn: async () => {
+      const result = await getPatientOwnerEmails(patientId);
+      return result;
+    },
+    enabled: !!patientId,
+  });
+
+  if (!patient) return null;
+
+  const owners = (ownerData?.owners as OwnerEntry[] | undefined) ?? [];
+
+  const handleAdd = async () => {
+    const trimmed = newOwnerEmail.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error("A valid email address is required");
+      return;
+    }
+    setIsSubmitting(true);
+    const result = await addPatientOwner(patientId, trimmed);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Owner added");
+      setNewOwnerEmail("");
+      onUpdate();
+      refetch();
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleRemove = async (ownerId: string) => {
+    setIsSubmitting(true);
+    const result = await removePatientOwner(patientId, ownerId);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Owner removed");
+      onUpdate();
+      refetch();
+    }
+    setIsSubmitting(false);
+  };
+
+  return (
+    <div className="bg-zinc-700 rounded-lg p-6">
+      <h2 className="text-lg font-semibold mb-4">Patient Owners</h2>
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={newOwnerEmail}
+            onChange={(e) => setNewOwnerEmail(e.target.value)}
+            placeholder="Email address to add"
+            className="flex-1 rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={isSubmitting || !newOwnerEmail.trim()}
+            className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {isSubmitting ? "Adding..." : "Add Owner"}
+          </button>
+        </div>
+        {isLoading ? (
+          <p className="text-sm text-zinc-400">Loading owners...</p>
+        ) : owners.length === 0 ? (
+          <p className="text-sm text-zinc-400">No owners found.</p>
+        ) : (
+          <>
+            <ul className="space-y-2">
+              {owners.map((owner) => (
+                <li
+                  key={owner.userId}
+                  className="flex items-center justify-between bg-zinc-800 rounded-md px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-zinc-300">{owner.email}</span>
+                    {owner.isCurrentUser && (
+                      <span className="text-xs bg-zinc-600 text-white px-2 py-0.5 rounded">
+                        You
+                      </span>
+                    )}
+                    {owner.isOwner && (
+                      <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded">
+                        Owner
+                      </span>
+                    )}
+                  </div>
+                  {!owner.isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(owner.userId)}
+                      disabled={isSubmitting}
+                      className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {owners.filter((owner) => !owner.isOwner).length === 0 && (
+              <p className="text-sm text-zinc-400">No additional owners.</p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccessCard({
+  title,
+  description,
+  url,
+  copyUrl,
+  copyLabel,
+  openLabel,
+  isExternal,
+  icon,
+}: {
+  title: string;
+  description: string;
+  url: string;
+  copyUrl?: string;
+  copyLabel: string;
+  openLabel: string;
+  isExternal: boolean;
+  icon: React.ReactNode;
+}) {
+  const linkToCopy = copyUrl ?? url;
+
+  return (
+    <div>
+      <div className="mb-3">
+        <h3 className="text-sm font-medium text-zinc-200">{title}</h3>
+        <p className="text-xs text-zinc-400">{description}</p>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => copyText(linkToCopy)}
+          aria-label={copyLabel}
+          className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-zinc-600 rounded-md hover:bg-zinc-500"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4 mr-1"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+            />
+          </svg>
+          Copy link
+        </button>
+        {isExternal ? (
+          <button
+            type="button"
+            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+            aria-label={openLabel}
+            className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+          >
+            {icon}
+            Open
+          </button>
+        ) : (
+          <Link
+            href={url}
+            aria-label={openLabel}
+            className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+          >
+            {icon}
+            Open
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PublicPatientLink({ patientId }: { patientId?: string | null }) {
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  if (!patientId) {
+    return (
+      <p className="text-sm text-zinc-400">
+        Select a patient to see the public link.
+      </p>
+    );
+  }
+
+  const url = `${origin}/p/${patientId}`;
+
+  return (
+    <AccessCard
+      title="Public page"
+      description="Anyone with this link can view this patient&apos;s page"
+      url={url}
+      copyLabel="Copy public link"
+      openLabel="Open public page"
+      isExternal
+      icon={
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4 mr-1"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+          />
+        </svg>
+      }
+    />
+  );
+}
+
+function HistoryMedsLink({ patientId }: { patientId?: string | null }) {
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  if (!patientId) {
+    return (
+      <p className="text-sm text-zinc-400">
+        Select a patient to view history and medication.
+      </p>
+    );
+  }
+
+  const fullUrl = `${origin}/graphs`;
+
+  return (
+    <AccessCard
+      title="History &amp; Meds"
+      description="Charts and medication changes for this patient"
+      url="/graphs"
+      copyUrl={fullUrl}
+      copyLabel="Copy history and medication link"
+      openLabel="Open history and medication page"
+      isExternal={false}
+      icon={
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4 mr-1"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+          />
+        </svg>
+      }
+    />
+  );
+}
+
+interface QuickButtonItem {
+  id: number;
+  value: number;
+}
+
+function QuickButtonSettings({
+  patientId,
+  seconds,
+  onUpdate,
+}: {
+  patientId: string;
+  seconds?: number[];
+  onUpdate: () => void;
+}) {
+  const nextId = useRef(1);
+  const initialItems = (seconds?.length ? seconds : [5, 10, 15, 20]).map(
+    (value, index) => {
+      nextId.current = Math.max(nextId.current, index + 2);
+      return { id: index + 1, value };
+    },
+  );
+  const [items, setItems] = useState<QuickButtonItem[]>(initialItems);
+  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const nextItems = (seconds?.length ? seconds : [5, 10, 15, 20]).map(
+      (value, index) => {
+        nextId.current = Math.max(nextId.current, index + 2);
+        return { id: index + 1, value };
+      },
+    );
+    setItems(nextItems);
+  }, [seconds]);
+
+  const updateValue = (id: number, value: string) => {
+    const num = Number(value);
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, value: Number.isNaN(num) ? 0 : num } : item,
+      ),
+    );
+  };
+
+  const addButton = () => {
+    setItems((prev) =>
+      prev.length >= 6 ? prev : [...prev, { id: nextId.current++, value: 30 }],
+    );
+  };
+
+  const removeButton = (id: number) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleSave = async () => {
+    const valid = items
+      .map((item) => Number(item.value))
+      .filter((s) => Number.isInteger(s) && s > 0);
+    if (valid.length === 0) {
+      toast.error("At least one positive duration is required");
+      return;
+    }
+    if (valid.length > 6) {
+      toast.error("At most 6 quick buttons are allowed");
+      return;
+    }
+    setIsSaving(true);
+    const result = await updatePatientQuickButtons(patientId, valid);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Quick buttons updated");
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      onUpdate();
+    }
+    setIsSaving(false);
+  };
+
+  return (
+    <div className="pt-4 border-t border-zinc-600">
+      <div className="mb-2">
+        <h3 className="text-sm font-medium text-zinc-200">
+          Quick seizure buttons
+        </h3>
+        <p className="text-xs text-zinc-400">
+          Durations shown on the public page for quick logging
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {items.map((item, index) => (
+          <div key={item.id} className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={item.value}
+              onChange={(e) => updateValue(item.id, e.target.value)}
+              className="w-20 rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1 text-sm text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              aria-label={`Quick button ${index + 1} duration in seconds`}
+            />
+            <span className="text-sm text-zinc-400">s</span>
+            <button
+              type="button"
+              onClick={() => removeButton(item.id)}
+              disabled={items.length <= 1}
+              aria-label={`Remove quick button ${index + 1}`}
+              className="ml-1 text-zinc-400 hover:text-red-400 disabled:opacity-30"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addButton}
+          disabled={items.length >= 6}
+          aria-label="Add quick button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-zinc-600 text-white hover:bg-zinc-500 disabled:opacity-50"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="ml-auto inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {isSaving ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DataExplorer() {
   const [selectedTable, setSelectedTable] = useState<
     "patients" | "seizures" | "medicationChanges"
@@ -83,25 +559,32 @@ function DataExplorer() {
     queryFn: getSettings,
   });
 
+  const currentPatientId = settings?.currentPatientId;
+  const currentPatient = patients.find((p) => p.id === currentPatientId);
+
   const { data: seizures = [], isLoading: isLoadingSeizures } = useQuery({
-    queryKey: ["seizures", "all", settings?.currentPatientId],
+    queryKey: ["seizures", "all", currentPatientId],
     queryFn: async () => {
-      if (!settings?.currentPatientId) return [];
-      const result = await listSeizures(0, Math.floor(Date.now() / 1000));
+      if (!currentPatientId) return [];
+      const result = await listSeizures(
+        currentPatientId,
+        0,
+        Math.floor(Date.now() / 1000),
+      );
       return result.seizures || [];
     },
-    enabled: !!settings?.currentPatientId,
+    enabled: !!currentPatientId,
   });
 
   const { data: medicationChanges = [], isLoading: isLoadingMedChanges } =
     useQuery({
-      queryKey: ["medicationChanges", "all", settings?.currentPatientId],
+      queryKey: ["medicationChanges", "all", currentPatientId],
       queryFn: async () => {
-        if (!settings?.currentPatientId) return [];
-        const result = await listMedicationChanges(settings.currentPatientId);
+        if (!currentPatientId) return [];
+        const result = await listMedicationChanges(currentPatientId);
         return result.medicationChanges || [];
       },
-      enabled: !!settings?.currentPatientId,
+      enabled: !!currentPatientId,
     });
 
   const renderTableData = () => {
@@ -255,56 +738,71 @@ function DataExplorer() {
 
   return (
     <div className="bg-zinc-700 rounded-lg p-6">
-      <h2 className="text-lg font-semibold mb-4">Data Explorer</h2>
-      <div className="flex gap-4 mb-6">
-        <button
-          onClick={() => setSelectedTable("patients")}
-          className={`px-4 py-2 rounded ${
-            selectedTable === "patients"
-              ? "bg-indigo-600 text-white"
-              : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
-          }`}
-        >
-          Patients
-        </button>
-        <button
-          onClick={() => setSelectedTable("seizures")}
-          className={`px-4 py-2 rounded ${
-            selectedTable === "seizures"
-              ? "bg-indigo-600 text-white"
-              : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
-          }`}
-        >
-          Seizures
-        </button>
-        <button
-          onClick={() => setSelectedTable("medicationChanges")}
-          className={`px-4 py-2 rounded ${
-            selectedTable === "medicationChanges"
-              ? "bg-indigo-600 text-white"
-              : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
-          }`}
-        >
-          Medication Changes
-        </button>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">Data Explorer</h2>
+        <p className="text-zinc-300 text-sm">
+          {currentPatient
+            ? `Showing data for ${currentPatient.name}`
+            : "Select a patient to explore its data"}
+        </p>
       </div>
-      {isLoading ? (
-        <div className="text-center py-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mx-auto" />
-          <p className="mt-2 text-zinc-300">Loading data...</p>
-        </div>
+      {!currentPatientId ? (
+        <p className="text-sm text-zinc-400">
+          No patient selected. Choose a patient above to view records.
+        </p>
       ) : (
-        renderTableData()
+        <>
+          <div className="flex gap-4 mb-6">
+            <button
+              onClick={() => setSelectedTable("patients")}
+              className={`px-4 py-2 rounded ${
+                selectedTable === "patients"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
+              }`}
+            >
+              Patients
+            </button>
+            <button
+              onClick={() => setSelectedTable("seizures")}
+              className={`px-4 py-2 rounded ${
+                selectedTable === "seizures"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
+              }`}
+            >
+              Seizures
+            </button>
+            <button
+              onClick={() => setSelectedTable("medicationChanges")}
+              className={`px-4 py-2 rounded ${
+                selectedTable === "medicationChanges"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-zinc-600 text-zinc-300 hover:bg-zinc-500"
+              }`}
+            >
+              Medication Changes
+            </button>
+          </div>
+          {isLoading ? (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mx-auto" />
+              <p className="mt-2 text-zinc-300">Loading data...</p>
+            </div>
+          ) : (
+            renderTableData()
+          )}
+          <DetailModal
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              setSelectedItem(null);
+            }}
+            data={selectedItem}
+            title={`${selectedTable.charAt(0).toUpperCase() + selectedTable.slice(1)} Details`}
+          />
+        </>
       )}
-      <DetailModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedItem(null);
-        }}
-        data={selectedItem}
-        title={`${selectedTable.charAt(0).toUpperCase() + selectedTable.slice(1)} Details`}
-      />
     </div>
   );
 }
@@ -323,39 +821,52 @@ export default function ClientSettings() {
     refetchOnWindowFocus: true,
   });
 
-  const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isCreatingPatient, setIsCreatingPatient] = useState(false);
+  const [newPatientName, setNewPatientName] = useState("");
+  const [showNewPatientForm, setShowNewPatientForm] = useState(false);
 
-  const handleToggle = async () => {
+  const { data: patients = [], refetch: refetchPatients } = useQuery({
+    queryKey: ["patients"],
+    queryFn: getPatients,
+  });
+
+  const handleNewPatient = async () => {
+    const name = newPatientName.trim();
+    if (!name) {
+      toast.error("Patient name is required");
+      return;
+    }
+
     try {
-      setIsUpdating(true);
-      const result = await updateSettings({
-        enableLatenode: !settings?.enableLatenode,
-      });
-      if (result.error) {
-        toast.error(result.error);
+      setIsCreatingPatient(true);
+      const result = await createPatient(name);
+      if (result.error || !result.patient) {
+        toast.error(result.error || "Failed to create patient");
       } else {
-        queryClient.invalidateQueries({ queryKey: ["settings"] });
+        toast.success(`Patient "${result.patient.name}" created`);
+        queryClient.invalidateQueries({ queryKey: ["patients"] });
+        setNewPatientName("");
+        setShowNewPatientForm(false);
       }
     } catch (error) {
-      console.error("Error updating settings:", error);
-      toast.error("Failed to update settings");
+      console.error("Error creating patient:", error);
+      toast.error("Failed to create patient");
     } finally {
-      setIsUpdating(false);
+      setIsCreatingPatient(false);
     }
   };
 
-  const handleNewPatient = () => {
-    // TODO: Implement new patient dialog
-    toast.info("New patient functionality coming soon!");
-  };
-
   const handleDeleteAll = async () => {
+    if (!settings?.currentPatientId) {
+      toast.error("No patient selected");
+      return;
+    }
+
     if (
       !window.confirm(
-        "Are you sure you want to delete ALL seizure records? This cannot be undone.",
+        "Are you sure you want to delete ALL seizure records for this patient? This cannot be undone.",
       )
     ) {
       return;
@@ -363,7 +874,7 @@ export default function ClientSettings() {
 
     try {
       setIsDeleting(true);
-      const result = await deleteAllSeizures();
+      const result = await deleteAllSeizures(settings.currentPatientId);
       if (result.error) {
         toast.error(result.error);
       } else {
@@ -383,10 +894,18 @@ export default function ClientSettings() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!settings?.currentPatientId) {
+      toast.error("No patient selected");
+      return;
+    }
+
     try {
       setIsUploading(true);
       const text = await file.text();
-      const result = await uploadSeizuresFromCSV(text);
+      const result = await uploadSeizuresFromCSV(
+        settings.currentPatientId,
+        text,
+      );
 
       if (result.error) {
         toast.error(result.error);
@@ -403,38 +922,7 @@ export default function ClientSettings() {
       toast.error("Failed to upload CSV file");
     } finally {
       setIsUploading(false);
-      // Reset the file input
       event.target.value = "";
-    }
-  };
-
-  const handleSheetImport = async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to import all seizures from the Google Sheet? This may create duplicates if records already exist.",
-      )
-    ) {
-      return;
-    }
-
-    try {
-      setIsImporting(true);
-      const result = await importSeizuresFromSheet();
-      if (result.error) {
-        toast.error(result.error);
-      } else {
-        const failedCount = result.failedRows?.length ?? 0;
-        toast.success(
-          `Successfully imported ${result.successCount} of ${result.totalRows} seizures!${
-            failedCount > 0 ? ` Failed to import ${failedCount} rows.` : ""
-          }`,
-        );
-      }
-    } catch (error) {
-      console.error("Error importing from sheet:", error);
-      toast.error("Failed to import from Google Sheet");
-    } finally {
-      setIsImporting(false);
     }
   };
 
@@ -489,135 +977,144 @@ export default function ClientSettings() {
 
         <div className="space-y-6">
           <div className="bg-zinc-700 rounded-lg p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Current Patient</h2>
+              <p className="text-zinc-300 text-sm">
+                Select the patient to track and share the public link
+              </p>
+            </div>
             <div className="flex flex-col space-y-4">
-              <PatientSelector settings={settings} />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleNewPatient}
-                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                    role="img"
+              <PatientSelector settings={settings} showHeader={false} />
+              {!showNewPatientForm ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPatientForm(true)}
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  New Patient
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-zinc-700 rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Latenode Webhook</h2>
-                <p className="text-zinc-300 text-sm mt-1">
-                  Enable or disable sending seizure data to Latenode webhook
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={settings.enableLatenode}
-                  onChange={handleToggle}
-                  disabled={isUpdating}
-                />
-                <div
-                  className={`w-11 h-6 bg-zinc-600 peer-focus:outline-none peer-focus:ring-4 
-                  peer-focus:ring-blue-800 rounded-full peer 
-                  peer-checked:after:translate-x-full peer-checked:after:border-white 
-                  after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
-                  after:bg-white after:border-zinc-300 after:border after:rounded-full 
-                  after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600`}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="bg-zinc-700 rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Data Management</h2>
-                <p className="text-zinc-300 text-sm mt-1">
-                  Delete all seizure records for the current patient
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleDeleteAll}
-                disabled={isDeleting}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-75 disabled:cursor-not-allowed min-w-[140px] justify-center"
-              >
-                {isDeleting ? (
-                  <>
                     <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
                       xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
+                      className="h-5 w-5 mr-2"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
                       aria-hidden="true"
+                      role="img"
                     >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
                       <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        fillRule="evenodd"
+                        d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                        clipRule="evenodd"
                       />
                     </svg>
-                    Deleting...
-                  </>
-                ) : (
-                  "Delete All Records"
-                )}
-              </button>
+                    New Patient
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="new-patient-name"
+                    className="text-sm text-zinc-300"
+                  >
+                    Patient name
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="new-patient-name"
+                      type="text"
+                      value={newPatientName}
+                      onChange={(e) => setNewPatientName(e.target.value)}
+                      placeholder="e.g. Alex"
+                      className="flex-1 rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleNewPatient}
+                      disabled={isCreatingPatient}
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {isCreatingPatient ? "Creating..." : "Create"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewPatientForm(false);
+                        setNewPatientName("");
+                      }}
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-zinc-600 rounded-md hover:bg-zinc-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="pt-4 border-t border-zinc-600">
+                <h3 className="text-sm font-medium text-zinc-200 mb-3">
+                  Patient access
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-zinc-800 rounded-lg p-4">
+                    <PublicPatientLink patientId={settings.currentPatientId} />
+                  </div>
+                  <div className="bg-zinc-800 rounded-lg p-4">
+                    <HistoryMedsLink patientId={settings.currentPatientId} />
+                  </div>
+                </div>
+              </div>
+              {settings.currentPatientId && (
+                <QuickButtonSettings
+                  patientId={settings.currentPatientId}
+                  seconds={
+                    patients.find((p) => p.id === settings.currentPatientId)
+                      ?.quickButtonSeconds
+                  }
+                  onUpdate={() => {}}
+                />
+              )}
             </div>
           </div>
 
+          {settings?.currentPatientId && (
+            <PatientOwnerManagement
+              patientId={settings.currentPatientId}
+              patients={patients}
+              onUpdate={() => {
+                queryClient.invalidateQueries({ queryKey: ["patients"] });
+                refetchPatients();
+              }}
+            />
+          )}
+
           <div className="bg-zinc-700 rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Import Seizure Records
-                </h2>
-                <p className="text-zinc-300 text-sm mt-1">
-                  Upload a CSV file with seizure records to import
-                </p>
-              </div>
-              <div className="flex items-center gap-4">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Data Management</h2>
+              <p className="text-zinc-300 text-sm">
+                Delete or import seizure records for the current patient
+              </p>
+            </div>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">
+                    Delete all records
+                  </h3>
+                  <p className="text-zinc-400 text-xs">
+                    Remove every seizure record for the current patient
+                  </p>
+                </div>
                 <button
-                  onClick={handleSheetImport}
-                  disabled={isImporting}
-                  className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white 
-                    ${isImporting ? "bg-indigo-500" : "bg-indigo-600 hover:bg-indigo-700"} 
-                    rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 
-                    disabled:opacity-50 min-w-[140px] justify-center whitespace-nowrap`}
+                  type="button"
+                  onClick={handleDeleteAll}
+                  disabled={isDeleting}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-75 disabled:cursor-not-allowed min-w-[140px] justify-center"
                 >
-                  {isImporting ? (
+                  {isDeleting ? (
                     <>
                       <svg
                         className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
                         xmlns="http://www.w3.org/2000/svg"
                         fill="none"
                         viewBox="0 0 24 24"
-                        aria-label="Loading indicator"
+                        aria-hidden="true"
                       >
                         <circle
                           className="opacity-25"
@@ -633,76 +1130,86 @@ export default function ClientSettings() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         />
                       </svg>
-                      Importing...
+                      Deleting...
                     </>
                   ) : (
-                    <>
-                      <FileSpreadsheet className="-ml-1 mr-2 h-5 w-5" />
-                      Import from Sheet
-                    </>
+                    "Delete All Records"
                   )}
                 </button>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  disabled={isUploading}
-                  className="hidden"
-                  id="csv-upload"
-                />
-                <label
-                  htmlFor="csv-upload"
-                  className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white 
-                    ${isUploading ? "bg-indigo-500" : "bg-indigo-600 hover:bg-indigo-700"} 
-                    rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 
-                    cursor-pointer disabled:opacity-50 min-w-[140px] justify-center`}
-                >
-                  {isUploading ? (
-                    <>
-                      <svg
-                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        aria-label="Loading indicator"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">
+                    Import records
+                  </h3>
+                  <p className="text-zinc-400 text-xs">
+                    Upload a CSV file with seizure records
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    disabled={isUploading || !settings?.currentPatientId}
+                    className="hidden"
+                    id="csv-upload"
+                  />
+                  <label
+                    htmlFor="csv-upload"
+                    className={`inline-flex items-center px-4 py-2 text-sm font-medium text-white
+                      ${isUploading ? "bg-indigo-500" : "bg-indigo-600 hover:bg-indigo-700"}
+                      rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
+                      cursor-pointer disabled:opacity-50 min-w-[140px] justify-center`}
+                  >
+                    {isUploading ? (
+                      <>
+                        <svg
+                          className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          aria-label="Loading indicator"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="-ml-1 mr-2 h-5 w-5"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
                           stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        className="-ml-1 mr-2 h-5 w-5"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        aria-label="Upload icon"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                      Upload CSV
-                    </>
-                  )}
-                </label>
+                          aria-label="Upload icon"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        Upload CSV
+                      </>
+                    )}
+                  </label>
+                </div>
               </div>
             </div>
           </div>

@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-// Load environment variables first
 import { config } from "dotenv";
 
 const envPath = resolve(__dirname, "../.env.local");
@@ -14,13 +13,28 @@ if (
   process.exit(1);
 }
 
-// Import after environment variables are loaded
-import { createDefaultPatient } from "@/app/actions";
+import { createDefaultPatientForUser } from "@/app/actions";
 import { runScript } from "./utils";
 
+function getArgs(): { userId: string; name: string } {
+  const userId = process.argv[2] || process.env.OWNER_USER_ID;
+  const name = process.argv[3] || process.env.DEFAULT_PATIENT_NAME || "Kat";
+  if (!userId) {
+    console.error(
+      "Usage: OWNER_USER_ID=<clerk-user-id> npx ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-default-patient.ts [patient-name]",
+    );
+    console.error(
+      "Or pass the Clerk userId as the first argument and optional patient name as the second.",
+    );
+    process.exit(1);
+  }
+  return { userId, name };
+}
+
 async function main() {
-  await createDefaultPatient();
-  console.log("Default patient 'Kat' created successfully");
+  const { userId, name } = getArgs();
+  await createDefaultPatientForUser(userId, name);
+  console.log(`Default patient '${name}' created for user ${userId}`);
 }
 
 runScript("Create Default Patient", main);

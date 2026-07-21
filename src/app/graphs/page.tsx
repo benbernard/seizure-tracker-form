@@ -1,8 +1,14 @@
 "use client";
 
 import type { MedicationChange, Seizure } from "@/lib/aws/schema";
+import {
+  formatPacificDateTime,
+  getCurrentPacificDayStartTimestamp,
+} from "@/lib/utils/dates";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
+import html2canvas from "html2canvas";
+import { DateTime } from "luxon";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
@@ -10,12 +16,12 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  ReferenceArea,
 } from "recharts";
 import {
   createMedicationChange,
@@ -25,13 +31,7 @@ import {
   listSeizures,
 } from "../actions";
 import { usePatientId } from "../components/PatientContext";
-import html2canvas from "html2canvas";
-import {
-  formatPacificDateTime,
-  getCurrentPacificDayStartTimestamp,
-} from "@/lib/utils/dates";
-import { DateTime } from "luxon";
-import { processSeizureData, type SeizureDataPoint } from "./utils";
+import { type SeizureDataPoint, processSeizureData } from "./utils";
 
 function LoadingSpinner() {
   return (
@@ -692,7 +692,8 @@ function GraphsContent() {
   } = useQuery({
     queryKey: ["seizures", "recent", patientId],
     queryFn: async () => {
-      const result = await listSeizures(sixWeeksAgo);
+      if (!patientId) return [];
+      const result = await listSeizures(patientId, sixWeeksAgo);
       if (result.error) {
         throw new Error(result.error);
       }
@@ -708,7 +709,12 @@ function GraphsContent() {
   } = useQuery({
     queryKey: ["seizures", "all", patientId],
     queryFn: async () => {
-      const result = await listSeizures(0, Math.floor(Date.now() / 1000));
+      if (!patientId) return [];
+      const result = await listSeizures(
+        patientId,
+        0,
+        Math.floor(Date.now() / 1000),
+      );
       if (result.error) {
         throw new Error(result.error);
       }
@@ -803,7 +809,7 @@ function GraphsContent() {
         <div className="w-full max-w-[800px]">
           <div className="flex items-center gap-4 mb-6">
             <Link
-              href="/"
+              href={patientId ? `/p/${patientId}` : "/"}
               className="text-gray-400 hover:text-white transition-colors"
               title="Back"
             >

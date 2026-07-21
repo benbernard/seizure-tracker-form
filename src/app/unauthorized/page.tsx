@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/clerk-client";
 import Link from "next/link";
 
 export default function UnauthorizedPage() {

@@ -16,12 +16,17 @@ const medicationChanges = [
   { date: "2025-02-06", medication: "Epidiolex", dosage: "0.3ml" },
 ];
 
+function getPatientId(): string {
+  return process.argv[2] || process.env.PATIENT_ID || "kat";
+}
+
 async function main() {
   const docClient = createDynamoClient();
+  const patientId = getPatientId();
 
   for (const change of medicationChanges) {
     const medicationChange: MedicationChange = {
-      id: "kat", // Using the default patient ID
+      id: patientId,
       date: Math.floor(new Date(change.date).getTime() / 1000),
       medication: change.medication,
       dosage: change.dosage,
