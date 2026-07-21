@@ -22,14 +22,14 @@ describe("PatientSelector", () => {
       {
         id: "pat1",
         name: "Alex",
-        ownerId: "u1",
+        ownerId: "owner@example.com",
         allowedUserIds: [],
         createdAt: 1,
       },
       {
         id: "pat2",
         name: "Sam",
-        ownerId: "u1",
+        ownerId: "owner@example.com",
         allowedUserIds: [],
         createdAt: 2,
       },
@@ -58,14 +58,14 @@ describe("PatientSelector", () => {
       {
         id: "pat1",
         name: "Alex",
-        ownerId: "u1",
+        ownerId: "owner@example.com",
         allowedUserIds: [],
         createdAt: 1,
       },
       {
         id: "pat2",
         name: "Sam",
-        ownerId: "u1",
+        ownerId: "owner@example.com",
         allowedUserIds: [],
         createdAt: 2,
       },

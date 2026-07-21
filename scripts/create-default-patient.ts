@@ -16,25 +16,25 @@ if (
 import { createDefaultPatientForUser } from "@/app/actions";
 import { runScript } from "./utils";
 
-function getArgs(): { userId: string; name: string } {
-  const userId = process.argv[2] || process.env.OWNER_USER_ID;
+function getArgs(): { ownerEmail: string; name: string } {
+  const ownerEmail = process.argv[2] || process.env.OWNER_EMAIL;
   const name = process.argv[3] || process.env.DEFAULT_PATIENT_NAME || "Kat";
-  if (!userId) {
+  if (!ownerEmail) {
     console.error(
-      "Usage: OWNER_USER_ID=<clerk-user-id> npx ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-default-patient.ts [patient-name]",
+      "Usage: OWNER_EMAIL=<email> npx ts-node -r tsconfig-paths/register -P scripts/tsconfig.json scripts/create-default-patient.ts [patient-name]",
     );
     console.error(
-      "Or pass the Clerk userId as the first argument and optional patient name as the second.",
+      "Or pass the owner email as the first argument and optional patient name as the second.",
     );
     process.exit(1);
   }
-  return { userId, name };
+  return { ownerEmail, name };
 }
 
 async function main() {
-  const { userId, name } = getArgs();
-  await createDefaultPatientForUser(userId, name);
-  console.log(`Default patient '${name}' created for user ${userId}`);
+  const { ownerEmail, name } = getArgs();
+  await createDefaultPatientForUser(ownerEmail, name);
+  console.log(`Default patient '${name}' created for ${ownerEmail}`);
 }
 
 runScript("Create Default Patient", main);

@@ -3,7 +3,7 @@
 import {
   assertOwnsPatient,
   getCurrentUser,
-  getCurrentUserId,
+  getCurrentUserEmail,
   getPatientById,
   isSuperUser,
   patientIsOwnedBy,
@@ -21,7 +21,6 @@ import type {
   Seizure,
   Settings,
 } from "@/lib/aws/schema";
-import { isLocalAuth } from "@/lib/clerk";
 import {
   getCurrentPacificDayStartTimestamp,
   getCurrentUtcTimestamp,
@@ -37,70 +36,11 @@ import {
   ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { parse } from "papaparse";
 
-// ---------------------------------------------------------------------------
-// User lookup helpers
-// ---------------------------------------------------------------------------
-
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-async function getUserDetails(userIds: string[]) {
-  const uniqueIds = [...new Set(userIds)];
-  if (isLocalAuth()) {
-    return uniqueIds.map((id) => ({ id, email: `${id}@local` }));
-  }
-  try {
-    const client = await clerkClient();
-    const { data } = await client.users.getUserList({
-      userId: uniqueIds,
-    });
-    return data.map((user) => ({
-      id: user.id,
-      email:
-        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
-          ?.emailAddress ??
-        user.emailAddresses[0]?.emailAddress ??
-        user.id,
-    }));
-  } catch (error) {
-    console.error("Error fetching user details from Clerk:", error);
-    return uniqueIds.map((id) => ({ id, email: id }));
-  }
-}
-
-async function findUserByEmail(email: string) {
-  if (isLocalAuth()) {
-    return { id: email, email };
-  }
-  try {
-    const client = await clerkClient();
-    const { data } = await client.users.getUserList({
-      emailAddress: [email],
-    });
-    if (data.length === 0) {
-      return null;
-    }
-    if (data.length > 1) {
-      return null;
-    }
-    const user = data[0];
-    return {
-      id: user.id,
-      email:
-        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
-          ?.emailAddress ??
-        user.emailAddresses[0]?.emailAddress ??
-        email,
-    };
-  } catch (error) {
-    console.error("Error looking up user by email:", error);
-    return null;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -196,8 +136,8 @@ async function getUserSettingsRecord(userId: string): Promise<Settings> {
 
 export async function getSettings() {
   try {
-    const userId = await getCurrentUserId();
-    return getUserSettingsRecord(userId);
+    const email = await getCurrentUserEmail();
+    return getUserSettingsRecord(email);
   } catch (error) {
     console.error("Error fetching settings:", error);
     throw new Error("Failed to fetch settings");
@@ -208,14 +148,14 @@ export async function updateSettings({
   currentPatientId,
 }: { currentPatientId: string | undefined }) {
   try {
-    const userId = await getCurrentUserId();
+    const email = await getCurrentUserEmail();
 
     if (currentPatientId) {
       await assertOwnsPatient(currentPatientId);
     }
 
     const settings: Settings = {
-      id: userId,
+      id: email,
       currentPatientId,
       updatedAt: Math.floor(Date.now() / 1000),
     };
@@ -238,10 +178,10 @@ export async function updateSettings({
 export async function updateCurrentPatient(patientId: string) {
   try {
     await assertOwnsPatient(patientId);
-    const userId = await getCurrentUserId();
+    const email = await getCurrentUserEmail();
 
     const settings: Settings = {
-      id: userId,
+      id: email,
       currentPatientId: patientId,
       updatedAt: Math.floor(Date.now() / 1000),
     };
@@ -263,7 +203,7 @@ export async function updateCurrentPatient(patientId: string) {
 
 export async function createPatient(name: string) {
   try {
-    const userId = await getCurrentUserId();
+    const email = await getCurrentUserEmail();
     const trimmedName = name.trim();
 
     const existing = await docClient.send(
@@ -279,8 +219,8 @@ export async function createPatient(name: string) {
     const patient: Patient = {
       id: generateUniquePatientId(trimmedName, existingIds),
       name: trimmedName,
-      ownerId: userId,
-      allowedUserIds: [userId],
+      ownerId: email,
+      allowedUserIds: [email],
       createdAt: Date.now(),
     };
 
@@ -301,19 +241,13 @@ export async function createPatient(name: string) {
 export async function addPatientOwner(patientId: string, ownerEmail: string) {
   try {
     await assertOwnsPatient(patientId);
-    const userId = await getCurrentUserId();
+    const currentEmail = await getCurrentUserEmail();
     const trimmed = ownerEmail.trim().toLowerCase();
     if (!trimmed || !isValidEmail(trimmed)) {
       return { error: "A valid email address is required" };
     }
 
-    const owner = await findUserByEmail(trimmed);
-    if (!owner) {
-      return { error: "No user found with that email address" };
-    }
-    const newOwnerId = owner.id;
-
-    if (newOwnerId === userId) {
+    if (trimmed === currentEmail) {
       return { error: "You already own this patient" };
     }
 
@@ -323,10 +257,10 @@ export async function addPatientOwner(patientId: string, ownerEmail: string) {
     }
 
     const allowed = new Set(patient.allowedUserIds ?? []);
-    if (allowed.has(newOwnerId)) {
+    if (allowed.has(trimmed)) {
       return { error: "User already has access to this patient" };
     }
-    allowed.add(newOwnerId);
+    allowed.add(trimmed);
 
     const command = new UpdateCommand({
       TableName: PATIENTS_TABLE,
@@ -346,12 +280,15 @@ export async function addPatientOwner(patientId: string, ownerEmail: string) {
   }
 }
 
-export async function removePatientOwner(patientId: string, ownerId: string) {
+export async function removePatientOwner(
+  patientId: string,
+  ownerEmail: string,
+) {
   try {
     await assertOwnsPatient(patientId);
-    const trimmed = ownerId.trim();
+    const trimmed = ownerEmail.trim().toLowerCase();
     if (!trimmed) {
-      return { error: "User ID is required" };
+      return { error: "Email address is required" };
     }
 
     const patient = await getPatientById(patientId);
@@ -386,23 +323,22 @@ export async function removePatientOwner(patientId: string, ownerId: string) {
 export async function getPatientOwnerEmails(patientId: string) {
   try {
     await assertOwnsPatient(patientId);
-    const currentUserId = await getCurrentUserId();
+    const currentEmail = await getCurrentUserEmail();
     const patient = await getPatientById(patientId);
     if (!patient) {
       return { error: "Patient not found" };
     }
 
-    const userIds = [
+    const emails = [
       ...new Set([patient.ownerId, ...(patient.allowedUserIds ?? [])]),
     ];
-    const users = await getUserDetails(userIds);
 
     return {
-      owners: users.map((user) => ({
-        userId: user.id,
-        email: user.email,
-        isCurrentUser: user.id === currentUserId,
-        isOwner: user.id === patient.ownerId,
+      owners: emails.map((email) => ({
+        userId: email,
+        email,
+        isCurrentUser: email === currentEmail,
+        isOwner: email === patient.ownerId,
       })),
     };
   } catch (error) {
@@ -457,7 +393,7 @@ function patientIsVisible(patient: Patient): boolean {
 
 export async function getPatients() {
   try {
-    const { userId, email } = await getCurrentUser();
+    const user = await getCurrentUser();
     const command = new ScanCommand({
       TableName: PATIENTS_TABLE,
     });
@@ -465,11 +401,11 @@ export async function getPatients() {
     const items = (response.Items as Patient[]) || [];
     const visible = items.filter(patientIsVisible);
 
-    if (isSuperUser(email)) {
+    if (isSuperUser(user.email)) {
       return visible;
     }
 
-    return visible.filter((patient) => patientIsOwnedBy(patient, userId));
+    return visible.filter((patient) => patientIsOwnedBy(patient, user));
   } catch (error) {
     console.error("Error getting patients:", error);
     throw new Error("Failed to get patients");
@@ -935,7 +871,7 @@ export async function deleteSeizure(patientId: string, date: number) {
 // ---------------------------------------------------------------------------
 
 export async function createDefaultPatientForUser(
-  userId: string,
+  ownerEmail: string,
   name: string,
 ) {
   const trimmedName = name.trim();
@@ -952,8 +888,8 @@ export async function createDefaultPatientForUser(
   const patient: Patient = {
     id: generateUniquePatientId(trimmedName, existingIds),
     name: trimmedName,
-    ownerId: userId,
-    allowedUserIds: [userId],
+    ownerId: ownerEmail,
+    allowedUserIds: [ownerEmail],
     createdAt: Date.now(),
   };
 

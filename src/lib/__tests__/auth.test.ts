@@ -13,7 +13,7 @@ import type { clerkClient } from "@clerk/nextjs/server";
 import {
   assertOwnsPatient,
   getCurrentUser,
-  getCurrentUserId,
+  getCurrentUserEmail,
   getPatientById,
   isSuperUser,
   patientIsOwnedBy,
@@ -25,11 +25,13 @@ const { getTable, resetTables } = jest.requireMock(
 ) as typeof MockDynamo;
 
 const OWNER_ID = "user_owner";
+const OWNER_EMAIL = "owner@example.com";
 const OTHER_USER_ID = "user_other";
+const OTHER_EMAIL = "other@example.com";
 
 const CLERK_USERS: Record<string, { id: string; email: string }> = {
-  user_owner: { id: "user_owner", email: "owner@example.com" },
-  user_other: { id: "user_other", email: "other@example.com" },
+  user_owner: { id: OWNER_ID, email: OWNER_EMAIL },
+  user_other: { id: OTHER_USER_ID, email: OTHER_EMAIL },
 };
 
 function configureClerkMock() {
@@ -74,7 +76,7 @@ function setCurrentUser(userId: string | null) {
 
 function seedPatient(
   patientId: string,
-  ownerId = OWNER_ID,
+  ownerId = OWNER_EMAIL,
   allowedUserIds: string[] = [],
 ) {
   const patient = {
@@ -95,14 +97,14 @@ describe("auth helpers", () => {
     setCurrentUser(OWNER_ID);
   });
 
-  describe("getCurrentUserId", () => {
-    test("returns the authenticated user id", async () => {
-      await expect(getCurrentUserId()).resolves.toBe(OWNER_ID);
+  describe("getCurrentUserEmail", () => {
+    test("returns the authenticated user's email", async () => {
+      await expect(getCurrentUserEmail()).resolves.toBe(OWNER_EMAIL);
     });
 
     test("throws when user is not authenticated", async () => {
       setCurrentUser(null);
-      await expect(getCurrentUserId()).rejects.toThrow("Unauthorized");
+      await expect(getCurrentUserEmail()).rejects.toThrow("Unauthorized");
     });
   });
 
@@ -121,29 +123,58 @@ describe("auth helpers", () => {
 
   describe("patientIsOwnedBy", () => {
     test("returns true for the owner", () => {
-      const patient = seedPatient("pat1", OWNER_ID);
-      expect(patientIsOwnedBy(patient, OWNER_ID)).toBe(true);
+      const patient = seedPatient("pat1", OWNER_EMAIL);
+      expect(
+        patientIsOwnedBy(patient, { userId: OWNER_ID, email: OWNER_EMAIL }),
+      ).toBe(true);
     });
 
     test("returns true for an allowed user", () => {
-      const patient = seedPatient("pat1", OWNER_ID, [OTHER_USER_ID]);
-      expect(patientIsOwnedBy(patient, OTHER_USER_ID)).toBe(true);
+      const patient = seedPatient("pat1", OWNER_EMAIL, [OTHER_EMAIL]);
+      expect(
+        patientIsOwnedBy(patient, {
+          userId: OTHER_USER_ID,
+          email: OTHER_EMAIL,
+        }),
+      ).toBe(true);
+    });
+
+    test("returns true for an allowed user keyed by userId", () => {
+      const patient = seedPatient("pat1", OWNER_EMAIL, [OTHER_USER_ID]);
+      expect(
+        patientIsOwnedBy(patient, {
+          userId: OTHER_USER_ID,
+          email: OTHER_EMAIL,
+        }),
+      ).toBe(true);
     });
 
     test("returns false for an unrelated user", () => {
-      const patient = seedPatient("pat1", OWNER_ID);
-      expect(patientIsOwnedBy(patient, "user_random")).toBe(false);
+      const patient = seedPatient("pat1", OWNER_EMAIL);
+      expect(
+        patientIsOwnedBy(patient, {
+          userId: "user_random",
+          email: "random@example.com",
+        }),
+      ).toBe(false);
     });
 
     test("handles missing allowedUserIds", () => {
       const patient = {
         id: "pat1",
         name: "Test",
-        ownerId: OWNER_ID,
+        ownerId: OWNER_EMAIL,
         createdAt: 1,
       };
-      expect(patientIsOwnedBy(patient, OWNER_ID)).toBe(true);
-      expect(patientIsOwnedBy(patient, OTHER_USER_ID)).toBe(false);
+      expect(
+        patientIsOwnedBy(patient, { userId: OWNER_ID, email: OWNER_EMAIL }),
+      ).toBe(true);
+      expect(
+        patientIsOwnedBy(patient, {
+          userId: OTHER_USER_ID,
+          email: OTHER_EMAIL,
+        }),
+      ).toBe(false);
     });
   });
 
@@ -178,15 +209,15 @@ describe("auth helpers", () => {
     });
 
     test("returns the patient for a super-user", async () => {
-      process.env.SUPER_USER_EMAILS = "owner@example.com";
-      seedPatient("pat1", OTHER_USER_ID);
+      process.env.SUPER_USER_EMAILS = OWNER_EMAIL;
+      seedPatient("pat1", OTHER_EMAIL);
       const result = await assertOwnsPatient("pat1");
       expect(result.id).toBe("pat1");
       process.env.SUPER_USER_EMAILS = undefined;
     });
 
     test("returns the patient for an allowed user", async () => {
-      seedPatient("pat1", OWNER_ID, [OTHER_USER_ID]);
+      seedPatient("pat1", OWNER_EMAIL, [OTHER_EMAIL]);
       setCurrentUser(OTHER_USER_ID);
       const result = await assertOwnsPatient("pat1");
       expect(result.id).toBe("pat1");
@@ -199,7 +230,7 @@ describe("auth helpers", () => {
     });
 
     test("throws when another user does not have access", async () => {
-      seedPatient("pat1", OWNER_ID);
+      seedPatient("pat1", OWNER_EMAIL);
       setCurrentUser(OTHER_USER_ID);
       await expect(assertOwnsPatient("pat1")).rejects.toThrow("Forbidden");
     });

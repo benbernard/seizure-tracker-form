@@ -9,6 +9,7 @@ import { generateUniquePatientId } from "../src/lib/utils/slug";
 import { createDynamoClient, runScript } from "./utils";
 
 const LOCAL_USER_ID = process.env.LOCAL_AUTH_USER_ID || "local-user";
+const LOCAL_EMAIL = `${LOCAL_USER_ID}@local`;
 const SEIZURE_COUNT = 5;
 
 function nowSeconds() {
@@ -39,8 +40,8 @@ async function main() {
   const patient: Patient = {
     id: generateUniquePatientId("Local Patient", new Set()),
     name: "Local Patient",
-    ownerId: LOCAL_USER_ID,
-    allowedUserIds: [LOCAL_USER_ID],
+    ownerId: LOCAL_EMAIL,
+    allowedUserIds: [LOCAL_EMAIL],
     createdAt: Date.now(),
   };
 
@@ -52,7 +53,7 @@ async function main() {
   );
 
   const settings: Settings = {
-    id: LOCAL_USER_ID,
+    id: LOCAL_EMAIL,
     currentPatientId: patient.id,
     updatedAt: nowSeconds(),
   };

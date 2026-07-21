@@ -5,14 +5,6 @@ import { docClient } from "./aws/dynamodb";
 import type { Patient } from "./aws/schema";
 import { auth, isLocalAuth } from "./clerk";
 
-export async function getCurrentUserId(): Promise<string> {
-  const { userId } = await auth();
-  if (!userId) {
-    throw new Error("Unauthorized");
-  }
-  return userId;
-}
-
 export async function getCurrentUser(): Promise<{
   userId: string;
   email: string;
@@ -41,6 +33,11 @@ export async function getCurrentUser(): Promise<{
   return { userId, email };
 }
 
+export async function getCurrentUserEmail(): Promise<string> {
+  const { email } = await getCurrentUser();
+  return email;
+}
+
 export function isSuperUser(email: string): boolean {
   const superEmails =
     process.env.SUPER_USER_EMAILS?.split(",").map((e) =>
@@ -63,18 +60,24 @@ export async function getPatientById(
   return response.Item as Patient | undefined;
 }
 
-export function patientIsOwnedBy(patient: Patient, userId: string): boolean {
-  if (patient.ownerId === userId) return true;
-  return (patient.allowedUserIds ?? []).includes(userId);
+export function patientIsOwnedBy(
+  patient: Patient,
+  user: { userId: string; email: string },
+): boolean {
+  const { userId, email } = user;
+  if (patient.ownerId === email || patient.ownerId === userId) return true;
+  return (patient.allowedUserIds ?? []).some(
+    (id) => id === email || id === userId,
+  );
 }
 
 export async function assertOwnsPatient(patientId: string): Promise<Patient> {
-  const { userId, email } = await getCurrentUser();
+  const user = await getCurrentUser();
   const patient = await getPatientById(patientId);
   if (!patient) {
     throw new Error("Patient not found");
   }
-  if (!patientIsOwnedBy(patient, userId) && !isSuperUser(email)) {
+  if (!patientIsOwnedBy(patient, user) && !isSuperUser(user.email)) {
     throw new Error("Forbidden");
   }
   return patient;

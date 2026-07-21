@@ -67,7 +67,13 @@ function buildSettings(currentPatientId?: string) {
 }
 
 function buildPatient(id: string, name: string) {
-  return { id, name, ownerId: "user_1", allowedUserIds: [], createdAt: 1 };
+  return {
+    id,
+    name,
+    ownerId: "owner@example.com",
+    allowedUserIds: [],
+    createdAt: 1,
+  };
 }
 
 function setupQuery(settings?: unknown, patients?: unknown, owners?: unknown) {

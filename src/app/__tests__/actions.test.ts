@@ -38,12 +38,15 @@ const { getTable, resetTables } = jest.requireMock(
 ) as typeof MockDynamo;
 
 const OWNER_ID = "user_owner";
+const OWNER_EMAIL = "owner@example.com";
 const OTHER_USER_ID = "user_other";
+const OTHER_EMAIL = "other@example.com";
+const FRIEND_EMAIL = "friend@example.com";
 
 const CLERK_USERS: Record<string, { id: string; email: string }> = {
-  user_owner: { id: "user_owner", email: "owner@example.com" },
-  user_friend: { id: "user_friend", email: "friend@example.com" },
-  user_other: { id: "user_other", email: "other@example.com" },
+  user_owner: { id: OWNER_ID, email: OWNER_EMAIL },
+  user_friend: { id: "user_friend", email: FRIEND_EMAIL },
+  user_other: { id: OTHER_USER_ID, email: OTHER_EMAIL },
 };
 
 function mockUserRecord(userId: string) {
@@ -93,7 +96,7 @@ function setCurrentUser(userId: string | null) {
 
 function seedPatient(
   patientId: string,
-  ownerId = OWNER_ID,
+  ownerId = OWNER_EMAIL,
   allowedUserIds: string[] = [],
 ) {
   const patients = getTable("patients");
@@ -434,8 +437,8 @@ describe("seizure actions", () => {
       expect(result.patient).toMatchObject({
         id: "alex",
         name: "Alex",
-        ownerId: OWNER_ID,
-        allowedUserIds: [OWNER_ID],
+        ownerId: OWNER_EMAIL,
+        allowedUserIds: [OWNER_EMAIL],
       });
       expect(getTable("patients")).toHaveLength(1);
     });
@@ -454,9 +457,9 @@ describe("seizure actions", () => {
     });
 
     test("getPatients returns only patients the user owns or has access to", async () => {
-      seedPatient("pat1", OWNER_ID);
-      seedPatient("pat2", OTHER_USER_ID);
-      seedPatient("pat3", OTHER_USER_ID, [OWNER_ID]);
+      seedPatient("pat1", OWNER_EMAIL);
+      seedPatient("pat2", OTHER_EMAIL);
+      seedPatient("pat3", OTHER_EMAIL, [OWNER_EMAIL]);
 
       const result = await getPatients();
 
@@ -464,9 +467,9 @@ describe("seizure actions", () => {
     });
 
     test("super-user can see all patients", async () => {
-      process.env.SUPER_USER_EMAILS = "owner@example.com";
-      seedPatient("pat1", OWNER_ID);
-      seedPatient("pat2", OTHER_USER_ID);
+      process.env.SUPER_USER_EMAILS = OWNER_EMAIL;
+      seedPatient("pat1", OWNER_EMAIL);
+      seedPatient("pat2", OTHER_EMAIL);
 
       const result = await getPatients();
 
@@ -479,13 +482,13 @@ describe("seizure actions", () => {
       await expect(getPatients()).rejects.toThrow("Failed to get patients");
     });
 
-    test("addPatientOwner grants access to another user", async () => {
+    test("addPatientOwner grants access to another user by email", async () => {
       seedPatient("pat1");
-      const result = await addPatientOwner("pat1", "friend@example.com");
+      const result = await addPatientOwner("pat1", FRIEND_EMAIL);
 
       expect(result).toEqual({ success: true });
       const patient = getTable("patients").find((p) => p.id === "pat1");
-      expect(patient?.allowedUserIds).toEqual(["user_friend"]);
+      expect(patient?.allowedUserIds).toEqual([FRIEND_EMAIL]);
     });
 
     test("addPatientOwner rejects invalid email", async () => {
@@ -496,28 +499,30 @@ describe("seizure actions", () => {
       });
     });
 
-    test("addPatientOwner rejects unknown email", async () => {
+    test("addPatientOwner accepts an email for a user who has not signed in", async () => {
       seedPatient("pat1");
 
-      expect(await addPatientOwner("pat1", "unknown@example.com")).toEqual({
-        error: "No user found with that email address",
-      });
+      const result = await addPatientOwner("pat1", "unknown@example.com");
+
+      expect(result).toEqual({ success: true });
+      const patient = getTable("patients").find((p) => p.id === "pat1");
+      expect(patient?.allowedUserIds).toEqual(["unknown@example.com"]);
     });
 
     test("addPatientOwner rejects duplicate or self owners", async () => {
-      seedPatient("pat1", OWNER_ID, ["user_friend"]);
+      seedPatient("pat1", OWNER_EMAIL, [FRIEND_EMAIL]);
 
-      expect(await addPatientOwner("pat1", "friend@example.com")).toEqual({
+      expect(await addPatientOwner("pat1", FRIEND_EMAIL)).toEqual({
         error: "User already has access to this patient",
       });
-      expect(await addPatientOwner("pat1", "owner@example.com")).toEqual({
+      expect(await addPatientOwner("pat1", OWNER_EMAIL)).toEqual({
         error: "You already own this patient",
       });
     });
 
     test("removePatientOwner revokes access", async () => {
-      seedPatient("pat1", OWNER_ID, ["user_friend"]);
-      const result = await removePatientOwner("pat1", "user_friend");
+      seedPatient("pat1", OWNER_EMAIL, [FRIEND_EMAIL]);
+      const result = await removePatientOwner("pat1", FRIEND_EMAIL);
 
       expect(result).toEqual({ success: true });
       const patient = getTable("patients").find((p) => p.id === "pat1");
@@ -525,33 +530,33 @@ describe("seizure actions", () => {
     });
 
     test("non-owner cannot add or remove owners", async () => {
-      seedPatient("pat1", OWNER_ID, ["user_friend"]);
+      seedPatient("pat1", OWNER_EMAIL, [FRIEND_EMAIL]);
       setCurrentUser(OTHER_USER_ID);
 
       expect(await addPatientOwner("pat1", "third@example.com")).toEqual({
         error: "Failed to add patient owner",
       });
-      expect(await removePatientOwner("pat1", "user_friend")).toEqual({
+      expect(await removePatientOwner("pat1", FRIEND_EMAIL)).toEqual({
         error: "Failed to remove patient owner",
       });
     });
 
     test("getPatientOwnerEmails returns the owner and allowed users", async () => {
-      seedPatient("pat1", OWNER_ID, ["user_friend"]);
+      seedPatient("pat1", OWNER_EMAIL, [FRIEND_EMAIL]);
 
       const result = await getPatientOwnerEmails("pat1");
 
       expect(result.error).toBeUndefined();
       expect(result.owners).toEqual([
         {
-          userId: "user_owner",
-          email: "owner@example.com",
+          userId: OWNER_EMAIL,
+          email: OWNER_EMAIL,
           isCurrentUser: true,
           isOwner: true,
         },
         {
-          userId: "user_friend",
-          email: "friend@example.com",
+          userId: FRIEND_EMAIL,
+          email: FRIEND_EMAIL,
           isCurrentUser: false,
           isOwner: false,
         },
@@ -615,7 +620,7 @@ describe("seizure actions", () => {
       setCurrentUser(OWNER_ID);
       const result = await getSettings();
 
-      expect(result.id).toBe(OWNER_ID);
+      expect(result.id).toBe(OWNER_EMAIL);
       expect(result.currentPatientId).toBeUndefined();
     });
 
@@ -623,7 +628,7 @@ describe("seizure actions", () => {
       seedPatient("pat1", OWNER_ID);
       await updateCurrentPatient("pat1");
 
-      const settings = getTable("settings").find((s) => s.id === OWNER_ID);
+      const settings = getTable("settings").find((s) => s.id === OWNER_EMAIL);
       expect(settings?.currentPatientId).toBe("pat1");
     });
 

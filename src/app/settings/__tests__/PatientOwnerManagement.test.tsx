@@ -37,7 +37,7 @@ describe("PatientOwnerManagement", () => {
     {
       id: "pat1",
       name: "Alex",
-      ownerId: "u1",
+      ownerId: "owner@example.com",
       allowedUserIds: [],
       createdAt: 1,
     },
@@ -51,7 +51,7 @@ describe("PatientOwnerManagement", () => {
     (getPatientOwnerEmails as jest.Mock).mockResolvedValue({
       owners: [
         {
-          userId: "u1",
+          userId: "owner@example.com",
           email: "owner@example.com",
           isCurrentUser: true,
           isOwner: true,
@@ -78,7 +78,7 @@ describe("PatientOwnerManagement", () => {
     (getPatientOwnerEmails as jest.Mock).mockResolvedValue({
       owners: [
         {
-          userId: "u1",
+          userId: "owner@example.com",
           email: "owner@example.com",
           isCurrentUser: true,
           isOwner: true,
@@ -120,13 +120,13 @@ describe("PatientOwnerManagement", () => {
     (getPatientOwnerEmails as jest.Mock).mockResolvedValue({
       owners: [
         {
-          userId: "u1",
+          userId: "owner@example.com",
           email: "owner@example.com",
           isCurrentUser: true,
           isOwner: true,
         },
         {
-          userId: "u2",
+          userId: "friend@example.com",
           email: "friend@example.com",
           isCurrentUser: false,
           isOwner: false,
@@ -148,7 +148,10 @@ describe("PatientOwnerManagement", () => {
     await user.click(screen.getByRole("button", { name: "Remove" }));
 
     await waitFor(() => {
-      expect(removePatientOwner).toHaveBeenCalledWith("pat1", "u2");
+      expect(removePatientOwner).toHaveBeenCalledWith(
+        "pat1",
+        "friend@example.com",
+      );
     });
     expect(onUpdate).toHaveBeenCalled();
   });
@@ -157,7 +160,7 @@ describe("PatientOwnerManagement", () => {
     (getPatientOwnerEmails as jest.Mock).mockResolvedValue({
       owners: [
         {
-          userId: "u1",
+          userId: "owner@example.com",
           email: "owner@example.com",
           isCurrentUser: true,
           isOwner: true,

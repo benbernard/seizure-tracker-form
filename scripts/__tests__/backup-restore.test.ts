@@ -138,15 +138,15 @@ describe("scripts", () => {
 
   describe("migrate-ownership", () => {
     test("sets ownerId on the existing patient and creates settings", async () => {
-      const ownerId = "user_owner";
-      process.argv = ["node", "migrate-ownership.ts", ownerId];
+      const ownerEmail = "owner@example.com";
+      process.argv = ["node", "migrate-ownership.ts", ownerEmail];
       mockClient.send.mockImplementation(async (command) => {
         if (isCommand<GetCommand>(command, "GetCommand")) {
           const key = command.input.Key?.id;
           if (key === "kat") {
             return { Item: { id: "kat", name: "Kat", createdAt: 1 } };
           }
-          if (key === ownerId) {
+          if (key === ownerEmail) {
             return { Item: null };
           }
         }
@@ -168,14 +168,14 @@ describe("scripts", () => {
         (command) => command.input.Item?.id === "kat",
       );
       const settingsPut = putCommands.find(
-        (command) => command.input.Item?.id === ownerId,
+        (command) => command.input.Item?.id === ownerEmail,
       );
       expect(patientPut?.input.Item).toMatchObject({
         id: "kat",
-        ownerId,
+        ownerId: ownerEmail,
       });
       expect(settingsPut?.input.Item).toMatchObject({
-        id: ownerId,
+        id: ownerEmail,
         currentPatientId: "kat",
       });
     });
