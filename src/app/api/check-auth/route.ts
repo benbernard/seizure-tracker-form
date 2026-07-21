@@ -1,4 +1,4 @@
-import { getAuth } from "@clerk/nextjs/server";
+import { getAuth } from "@/lib/clerk";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       email.trim(),
     ) || [];
 
-  if (!email || !allowlist.includes(email)) {
+  if (allowlist.length > 0 && (!email || !allowlist.includes(email))) {
     return new NextResponse(null, { status: 403 });
   }
 

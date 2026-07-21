@@ -6,8 +6,7 @@ export interface Seizure {
 }
 
 export interface Settings {
-  id: string;
-  enableLatenode: boolean;
+  id: string; // Clerk userId
   currentPatientId?: string;
   updatedAt: number; // Unix epoch
 }
@@ -15,6 +14,9 @@ export interface Settings {
 export interface Patient {
   id: string;
   name: string;
+  ownerId: string; // Clerk userId
+  allowedUserIds?: string[]; // additional users who can manage this patient
+  quickButtonSeconds?: number[]; // durations for the public quick-submit buttons
   createdAt: number;
 }
 

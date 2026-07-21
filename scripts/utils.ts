@@ -37,13 +37,19 @@ export function createDynamoClient() {
     throw new Error("AWS credentials not properly loaded");
   }
 
-  const client = new DynamoDBClient({
+  const clientConfig: ConstructorParameters<typeof DynamoDBClient>[0] = {
     region,
     credentials: {
       accessKeyId,
       secretAccessKey,
     },
-  });
+  };
+
+  if (process.env.DYNAMODB_ENDPOINT) {
+    clientConfig.endpoint = process.env.DYNAMODB_ENDPOINT;
+  }
+
+  const client = new DynamoDBClient(clientConfig);
 
   return DynamoDBDocumentClient.from(client, {
     marshallOptions: {

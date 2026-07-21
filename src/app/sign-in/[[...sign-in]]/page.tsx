@@ -1,12 +1,12 @@
-"use client";
-
-import { SignIn } from "@clerk/nextjs";
-import { useSearchParams } from "next/navigation";
+import { isLocalAuth } from "@/lib/clerk";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import SignInClient from "./SignInClient";
 
 export default function SignInPage() {
-  const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect_url");
+  if (isLocalAuth()) {
+    redirect("/settings");
+  }
 
   return (
     <div className="min-h-screen bg-zinc-800 flex flex-col items-center justify-center gap-4">
@@ -16,7 +16,7 @@ export default function SignInPage() {
       >
         ← Back to App
       </Link>
-      <SignIn fallbackRedirectUrl={redirectUrl || "/"} />
+      <SignInClient />
     </div>
   );
 }

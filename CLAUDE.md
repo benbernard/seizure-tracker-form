@@ -1,0 +1,1 @@
+Do not run `npm run build` while `npm run dev` is running; both write to `.next` and can corrupt the build cache. Prefer `npm run lint`, `npx tsc --noEmit`, and `npm test` for verification while dev is active.

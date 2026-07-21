@@ -6,7 +6,13 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { getPatients, updateCurrentPatient } from "../actions";
 
-export default function PatientSelector({ settings }: { settings: Settings }) {
+export default function PatientSelector({
+  settings,
+  showHeader = true,
+}: {
+  settings: Settings;
+  showHeader?: boolean;
+}) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -42,20 +48,38 @@ export default function PatientSelector({ settings }: { settings: Settings }) {
     return <div>Loading patients...</div>;
   }
 
-  return (
-    <div className="flex flex-col space-y-2">
+  const header = showHeader ? (
+    <div>
+      <h2 className="text-lg font-semibold">Current Patient</h2>
+      <p className="text-zinc-300 text-sm">
+        Select the current patient to track seizures for
+      </p>
+    </div>
+  ) : null;
+
+  if (patients.length === 0) {
+    return (
       <div>
-        <h2 className="text-lg font-semibold">Current Patient</h2>
+        {header}
         <p className="text-zinc-300 text-sm">
-          Select the current patient to track seizures for
+          No patients yet. Create one to get started.
         </p>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col space-y-2">
+      {header}
       <select
         id="patient-select"
         className="rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        value={settings.currentPatientId || "kat"}
+        value={settings.currentPatientId || ""}
         onChange={(e) => handlePatientChange(e.target.value)}
       >
+        <option value="" disabled>
+          Select a patient
+        </option>
         {patients.map((patient) => (
           <option key={patient.id} value={patient.id}>
             {patient.name}

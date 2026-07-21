@@ -1,20 +1,31 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import {
+  assertOwnsPatient,
+  getCurrentUserId,
+  getPatientById,
+  patientIsOwnedBy,
+} from "@/lib/auth";
 import {
   MEDICATION_CHANGES_TABLE,
   PATIENTS_TABLE,
+  SEIZURES_TABLE,
   SETTINGS_TABLE,
-  LATENODE_SEIZURE_API,
-  DEBUG_DELETE,
-  SKIP_DELETE_WRITES,
 } from "@/lib/aws/confs";
-import { SEIZURES_TABLE, docClient } from "@/lib/aws/dynamodb";
+import { docClient } from "@/lib/aws/dynamodb";
 import type {
   MedicationChange,
   Patient,
   Seizure,
   Settings,
 } from "@/lib/aws/schema";
+import { isLocalAuth } from "@/lib/clerk";
+import {
+  getCurrentPacificDayStartTimestamp,
+  getCurrentUtcTimestamp,
+  pacificToUtcTimestamp,
+} from "@/lib/utils/dates";
 import {
   BatchWriteCommand,
   DeleteCommand,
@@ -22,51 +33,169 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import axios from "axios";
+import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { parse } from "papaparse";
-import {
-  deleteFromLatenode,
-  parseSheetDate,
-  cleanNote,
-} from "@/lib/latenode/sheets";
-import {
-  getCurrentUtcTimestamp,
-  pacificToUtcTimestamp,
-} from "@/lib/utils/dates";
 
-const SETTINGS_ID = "global";
+// ---------------------------------------------------------------------------
+// User lookup helpers
+// ---------------------------------------------------------------------------
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function getUserDetails(userIds: string[]) {
+  const uniqueIds = [...new Set(userIds)];
+  if (isLocalAuth()) {
+    return uniqueIds.map((id) => ({ id, email: `${id}@local` }));
+  }
+  try {
+    const client = await clerkClient();
+    const { data } = await client.users.getUserList({
+      userId: uniqueIds,
+    });
+    return data.map((user) => ({
+      id: user.id,
+      email:
+        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
+          ?.emailAddress ??
+        user.emailAddresses[0]?.emailAddress ??
+        user.id,
+    }));
+  } catch (error) {
+    console.error("Error fetching user details from Clerk:", error);
+    return uniqueIds.map((id) => ({ id, email: id }));
+  }
+}
+
+async function findUserByEmail(email: string) {
+  if (isLocalAuth()) {
+    return { id: email, email };
+  }
+  try {
+    const client = await clerkClient();
+    const { data } = await client.users.getUserList({
+      emailAddress: [email],
+    });
+    if (data.length === 0) {
+      return null;
+    }
+    if (data.length > 1) {
+      return null;
+    }
+    const user = data[0];
+    return {
+      id: user.id,
+      email:
+        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
+          ?.emailAddress ??
+        user.emailAddresses[0]?.emailAddress ??
+        email,
+    };
+  } catch (error) {
+    console.error("Error looking up user by email:", error);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public actions (no auth required)
+// ---------------------------------------------------------------------------
+
+export async function getPublicPatient(patientId: string) {
+  const patient = await getPatientById(patientId);
+  if (!patient) {
+    return null;
+  }
+  return {
+    id: patient.id,
+    name: patient.name,
+    quickButtonSeconds: patient.quickButtonSeconds ?? [5, 10, 15, 20],
+  };
+}
+
+export async function getTodaySeizuresPublic(patientId: string) {
+  const patient = await getPatientById(patientId);
+  if (!patient) {
+    return { error: "Patient not found" };
+  }
+
+  const startOfDay = getCurrentPacificDayStartTimestamp();
+  const command = new QueryCommand({
+    TableName: SEIZURES_TABLE,
+    KeyConditionExpression: "patient = :patient AND #date >= :start",
+    ExpressionAttributeNames: {
+      "#date": "date",
+    },
+    ExpressionAttributeValues: {
+      ":patient": patientId,
+      ":start": startOfDay,
+    },
+    ScanIndexForward: false,
+  });
+
+  const response = await docClient.send(command);
+  return { seizures: (response.Items as Seizure[]) || [] };
+}
+
+export async function submitSeizurePublic(
+  patientId: string,
+  duration: string,
+  notes?: string,
+) {
+  const patient = await getPatientById(patientId);
+  if (!patient) {
+    return { error: "Patient not found" };
+  }
+
+  const durationNum = Number(duration);
+  if (!duration || Number.isNaN(durationNum) || durationNum <= 0) {
+    return { error: "Duration must be a positive number" };
+  }
+
+  const seizure: Seizure = {
+    patient: patientId,
+    date: getCurrentUtcTimestamp(),
+    duration: durationNum,
+    notes: notes?.trim() || "WebForm",
+  };
+
+  const command = new PutCommand({
+    TableName: SEIZURES_TABLE,
+    Item: seizure,
+  });
+
+  await docClient.send(command);
+  revalidatePath(`/p/${patientId}`);
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Auth-only actions
+// ---------------------------------------------------------------------------
+
+async function getUserSettingsRecord(userId: string): Promise<Settings> {
+  const command = new GetCommand({
+    TableName: SETTINGS_TABLE,
+    Key: { id: userId },
+  });
+  const response = await docClient.send(command);
+  return (
+    (response.Item as Settings) || {
+      id: userId,
+      currentPatientId: undefined,
+      updatedAt: Math.floor(Date.now() / 1000),
+    }
+  );
+}
 
 export async function getSettings() {
   try {
-    const command = new GetCommand({
-      TableName: SETTINGS_TABLE,
-      Key: {
-        id: SETTINGS_ID,
-      },
-    });
-
-    const response = await docClient.send(command);
-    const settings = (response.Item as Settings) || {
-      id: SETTINGS_ID,
-      enableLatenode: false,
-      currentPatientId: "kat", // Set default patient
-      updatedAt: Date.now() / 1000,
-    };
-
-    // If no patient is selected, use the default
-    if (!settings.currentPatientId) {
-      settings.currentPatientId = "kat";
-      // Save the default setting
-      const updateCommand = new PutCommand({
-        TableName: SETTINGS_TABLE,
-        Item: settings,
-      });
-      await docClient.send(updateCommand);
-    }
-
-    return settings;
+    const userId = await getCurrentUserId();
+    return getUserSettingsRecord(userId);
   } catch (error) {
     console.error("Error fetching settings:", error);
     throw new Error("Failed to fetch settings");
@@ -74,12 +203,18 @@ export async function getSettings() {
 }
 
 export async function updateSettings({
-  enableLatenode,
-}: { enableLatenode: boolean }) {
+  currentPatientId,
+}: { currentPatientId: string | undefined }) {
   try {
+    const userId = await getCurrentUserId();
+
+    if (currentPatientId) {
+      await assertOwnsPatient(currentPatientId);
+    }
+
     const settings: Settings = {
-      id: SETTINGS_ID,
-      enableLatenode,
+      id: userId,
+      currentPatientId,
       updatedAt: Math.floor(Date.now() / 1000),
     };
 
@@ -90,6 +225,7 @@ export async function updateSettings({
 
     await docClient.send(command);
     revalidatePath("/settings");
+    revalidatePath("/graphs");
     return { success: true };
   } catch (error) {
     console.error("Error updating settings:", error);
@@ -97,46 +233,275 @@ export async function updateSettings({
   }
 }
 
+export async function updateCurrentPatient(patientId: string) {
+  try {
+    await assertOwnsPatient(patientId);
+    const userId = await getCurrentUserId();
+
+    const settings: Settings = {
+      id: userId,
+      currentPatientId: patientId,
+      updatedAt: Math.floor(Date.now() / 1000),
+    };
+
+    const command = new PutCommand({
+      TableName: SETTINGS_TABLE,
+      Item: settings,
+    });
+
+    await docClient.send(command);
+    revalidatePath("/");
+    revalidatePath("/settings");
+    revalidatePath("/graphs");
+  } catch (error) {
+    console.error("Error updating current patient:", error);
+    throw new Error("Failed to update current patient");
+  }
+}
+
+export async function createPatient(name: string) {
+  try {
+    const userId = await getCurrentUserId();
+    const patient: Patient = {
+      id: randomUUID(),
+      name: name.trim(),
+      ownerId: userId,
+      allowedUserIds: [],
+      createdAt: Date.now(),
+    };
+
+    const command = new PutCommand({
+      TableName: PATIENTS_TABLE,
+      Item: patient,
+    });
+
+    await docClient.send(command);
+    return { success: true, patient };
+  } catch (error) {
+    console.error("Error creating patient:", error);
+    return { error: "Failed to create patient" };
+  }
+}
+
+export async function addPatientOwner(patientId: string, ownerEmail: string) {
+  try {
+    await assertOwnsPatient(patientId);
+    const userId = await getCurrentUserId();
+    const trimmed = ownerEmail.trim().toLowerCase();
+    if (!trimmed || !isValidEmail(trimmed)) {
+      return { error: "A valid email address is required" };
+    }
+
+    const owner = await findUserByEmail(trimmed);
+    if (!owner) {
+      return { error: "No user found with that email address" };
+    }
+    const newOwnerId = owner.id;
+
+    if (newOwnerId === userId) {
+      return { error: "You already own this patient" };
+    }
+
+    const patient = await getPatientById(patientId);
+    if (!patient) {
+      return { error: "Patient not found" };
+    }
+
+    const allowed = new Set(patient.allowedUserIds ?? []);
+    if (allowed.has(newOwnerId)) {
+      return { error: "User already has access to this patient" };
+    }
+    allowed.add(newOwnerId);
+
+    const command = new UpdateCommand({
+      TableName: PATIENTS_TABLE,
+      Key: { id: patientId },
+      UpdateExpression: "SET allowedUserIds = :allowedUserIds",
+      ExpressionAttributeValues: {
+        ":allowedUserIds": Array.from(allowed),
+      },
+    });
+
+    await docClient.send(command);
+    revalidatePath("/settings");
+    return { success: true };
+  } catch (error) {
+    console.error("Error adding patient owner:", error);
+    return { error: "Failed to add patient owner" };
+  }
+}
+
+export async function removePatientOwner(patientId: string, ownerId: string) {
+  try {
+    await assertOwnsPatient(patientId);
+    const trimmed = ownerId.trim();
+    if (!trimmed) {
+      return { error: "User ID is required" };
+    }
+
+    const patient = await getPatientById(patientId);
+    if (!patient) {
+      return { error: "Patient not found" };
+    }
+
+    const allowed = new Set(patient.allowedUserIds ?? []);
+    if (!allowed.has(trimmed)) {
+      return { error: "User does not have access to this patient" };
+    }
+    allowed.delete(trimmed);
+
+    const command = new UpdateCommand({
+      TableName: PATIENTS_TABLE,
+      Key: { id: patientId },
+      UpdateExpression: "SET allowedUserIds = :allowedUserIds",
+      ExpressionAttributeValues: {
+        ":allowedUserIds": Array.from(allowed),
+      },
+    });
+
+    await docClient.send(command);
+    revalidatePath("/settings");
+    return { success: true };
+  } catch (error) {
+    console.error("Error removing patient owner:", error);
+    return { error: "Failed to remove patient owner" };
+  }
+}
+
+export async function getPatientOwnerEmails(patientId: string) {
+  try {
+    await assertOwnsPatient(patientId);
+    const currentUserId = await getCurrentUserId();
+    const patient = await getPatientById(patientId);
+    if (!patient) {
+      return { error: "Patient not found" };
+    }
+
+    const userIds = [patient.ownerId, ...(patient.allowedUserIds ?? [])];
+    const users = await getUserDetails(userIds);
+
+    return {
+      owners: users.map((user) => ({
+        userId: user.id,
+        email: user.email,
+        isCurrentUser: user.id === currentUserId,
+        isOwner: user.id === patient.ownerId,
+      })),
+    };
+  } catch (error) {
+    console.error("Error fetching patient owner emails:", error);
+    return { error: "Failed to fetch patient owners" };
+  }
+}
+
+export async function updatePatientQuickButtons(
+  patientId: string,
+  seconds: number[],
+) {
+  try {
+    await assertOwnsPatient(patientId);
+    const patient = await getPatientById(patientId);
+    if (!patient) {
+      return { error: "Patient not found" };
+    }
+
+    const validSeconds = seconds
+      .map((s) => Number(s))
+      .filter((s) => Number.isInteger(s) && s > 0);
+    if (validSeconds.length === 0) {
+      return { error: "At least one positive duration is required" };
+    }
+    if (validSeconds.length > 6) {
+      return { error: "At most 6 quick buttons are allowed" };
+    }
+
+    const command = new UpdateCommand({
+      TableName: PATIENTS_TABLE,
+      Key: { id: patientId },
+      UpdateExpression: "SET quickButtonSeconds = :seconds",
+      ExpressionAttributeValues: {
+        ":seconds": validSeconds,
+      },
+    });
+
+    await docClient.send(command);
+    revalidatePath("/settings");
+    revalidatePath(`/p/${patientId}`);
+    return { success: true, quickButtonSeconds: validSeconds };
+  } catch (error) {
+    console.error("Error updating quick buttons:", error);
+    return { error: "Failed to update quick buttons" };
+  }
+}
+
+export async function getPatients() {
+  try {
+    const userId = await getCurrentUserId();
+    const command = new ScanCommand({
+      TableName: PATIENTS_TABLE,
+    });
+
+    const response = await docClient.send(command);
+    const items = (response.Items as Patient[]) || [];
+    return items.filter((patient) => patientIsOwnedBy(patient, userId));
+  } catch (error) {
+    console.error("Error getting patients:", error);
+    throw new Error("Failed to get patients");
+  }
+}
+
 export async function listSeizures(
-  startTimestamp: number,
+  patientId: string,
+  startTimestamp?: number,
   endTimestamp?: number,
 ) {
   try {
+    await assertOwnsPatient(patientId);
+
+    const start = startTimestamp ?? 0;
+    const hasEnd = endTimestamp !== undefined;
+
     const command = new QueryCommand({
-      TableName: process.env.DYNAMODB_TABLE || "seizures",
-      KeyConditionExpression: endTimestamp
+      TableName: SEIZURES_TABLE,
+      KeyConditionExpression: hasEnd
         ? "patient = :patient AND #date BETWEEN :start AND :end"
         : "patient = :patient AND #date >= :start",
       ExpressionAttributeNames: {
         "#date": "date",
       },
-      ExpressionAttributeValues: endTimestamp
-        ? {
-            ":patient": "kat",
-            ":start": startTimestamp,
-            ":end": endTimestamp,
-          }
-        : {
-            ":patient": "kat",
-            ":start": startTimestamp,
-          },
-      ScanIndexForward: false, // Sort in descending order (newest first)
+      ExpressionAttributeValues: {
+        ":patient": patientId,
+        ":start": start,
+        ...(hasEnd ? { ":end": endTimestamp } : {}),
+      },
+      ScanIndexForward: false,
     });
 
     const response = await docClient.send(command);
-    return { seizures: response.Items as Seizure[] };
+    return { seizures: (response.Items as Seizure[]) || [] };
   } catch (error) {
     console.error("Error listing seizures:", error);
     return { error: "Failed to list seizures" };
   }
 }
 
-export async function submitSeizure(duration: string, notes?: string) {
+export async function submitSeizure(
+  patientId: string,
+  duration: string,
+  notes?: string,
+) {
   try {
+    await assertOwnsPatient(patientId);
+
+    const durationNum = Number(duration);
+    if (!duration || Number.isNaN(durationNum) || durationNum <= 0) {
+      return { error: "Duration must be a positive number" };
+    }
+
     const seizure: Seizure = {
-      patient: "kat",
+      patient: patientId,
       date: getCurrentUtcTimestamp(),
-      duration: Number(duration),
+      duration: durationNum,
       notes: notes?.trim() || "WebForm",
     };
 
@@ -146,20 +511,8 @@ export async function submitSeizure(duration: string, notes?: string) {
     });
 
     await docClient.send(command);
-
-    // Check settings and call webhook if enabled
-    const settings = await getSettings();
-    if (settings.enableLatenode) {
-      await axios.post(
-        "https://webhook.latenode.com/11681/prod/84908c3c-1283-4f18-9ef3-d773bd08ad6e",
-        {
-          duration,
-          notes: seizure.notes,
-        },
-      );
-    }
-
     revalidatePath("/");
+    revalidatePath("/graphs");
     return { success: true };
   } catch (error) {
     console.error("Error creating seizure:", error);
@@ -167,61 +520,10 @@ export async function submitSeizure(duration: string, notes?: string) {
   }
 }
 
-export async function createDefaultPatient() {
+export async function deleteAllSeizures(patientId: string) {
   try {
-    const command = new PutCommand({
-      TableName: PATIENTS_TABLE,
-      Item: {
-        id: "kat",
-        name: "Kat",
-        createdAt: Date.now(),
-      } as Patient,
-    });
+    await assertOwnsPatient(patientId);
 
-    await docClient.send(command);
-  } catch (error) {
-    console.error("Error creating default patient:", error);
-    throw new Error("Failed to create default patient");
-  }
-}
-
-export async function getPatients() {
-  try {
-    const command = new ScanCommand({
-      TableName: PATIENTS_TABLE,
-    });
-
-    const response = await docClient.send(command);
-    return response.Items as Patient[];
-  } catch (error) {
-    console.error("Error getting patients:", error);
-    throw new Error("Failed to get patients");
-  }
-}
-
-export async function updateCurrentPatient(patientId: string) {
-  try {
-    const command = new PutCommand({
-      TableName: SETTINGS_TABLE,
-      Item: {
-        id: "global",
-        enableLatenode: false,
-        currentPatientId: patientId,
-        updatedAt: Date.now(),
-      } as Settings,
-    });
-
-    await docClient.send(command);
-    revalidatePath("/");
-  } catch (error) {
-    console.error("Error updating current patient:", error);
-    throw new Error("Failed to update current patient");
-  }
-}
-
-export async function deleteAllSeizures() {
-  try {
-    // First, get all seizures for the current patient
     const command = new ScanCommand({
       TableName: SEIZURES_TABLE,
       FilterExpression: "#patient = :patient",
@@ -229,7 +531,7 @@ export async function deleteAllSeizures() {
         "#patient": "patient",
       },
       ExpressionAttributeValues: {
-        ":patient": "kat",
+        ":patient": patientId,
       },
     });
 
@@ -237,7 +539,6 @@ export async function deleteAllSeizures() {
     const items = response.Items || [];
     console.log(`Starting deletion of ${items.length} seizures...`);
 
-    // Process items in batches of 25 (DynamoDB BatchWrite limit)
     const BATCH_SIZE = 25;
     const batches = [];
     for (let i = 0; i < items.length; i += BATCH_SIZE) {
@@ -246,44 +547,37 @@ export async function deleteAllSeizures() {
 
     let deletedCount = 0;
     for (const batch of batches) {
-      try {
-        const batchCommand = new BatchWriteCommand({
-          RequestItems: {
-            [SEIZURES_TABLE]: batch.map((item) => ({
-              DeleteRequest: {
-                Key: {
-                  patient: item.patient,
-                  date: item.date,
-                },
+      const batchCommand = new BatchWriteCommand({
+        RequestItems: {
+          [SEIZURES_TABLE]: batch.map((item) => ({
+            DeleteRequest: {
+              Key: {
+                patient: item.patient,
+                date: item.date,
               },
-            })),
-          },
-        });
+            },
+          })),
+        },
+      });
 
-        const result = await docClient.send(batchCommand);
+      const result = await docClient.send(batchCommand);
 
-        // Handle unprocessed items
-        if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
-          console.error(
-            "Error: Some items were not processed:",
-            result.UnprocessedItems[SEIZURES_TABLE],
-          );
-        } else {
-          deletedCount += batch.length;
-          if (deletedCount % 500 === 0 || deletedCount === items.length) {
-            console.log(
-              `Deleted ${deletedCount} of ${items.length} seizures...`,
-            );
-          }
+      if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
+        console.error(
+          "Error: Some items were not processed:",
+          result.UnprocessedItems[SEIZURES_TABLE],
+        );
+      } else {
+        deletedCount += batch.length;
+        if (deletedCount % 500 === 0 || deletedCount === items.length) {
+          console.log(`Deleted ${deletedCount} of ${items.length} seizures...`);
         }
-      } catch (error) {
-        console.error("Error processing delete batch:", error);
-        throw error;
       }
     }
 
     console.log(`Deletion complete. ${deletedCount} seizures deleted.`);
     revalidatePath("/");
+    revalidatePath("/graphs");
     return { success: true, count: deletedCount };
   } catch (error) {
     console.error("Error deleting seizures:", error);
@@ -291,22 +585,24 @@ export async function deleteAllSeizures() {
   }
 }
 
-export async function uploadSeizuresFromCSV(csvContent: string) {
+export async function uploadSeizuresFromCSV(
+  patientId: string,
+  csvContent: string,
+) {
   try {
+    await assertOwnsPatient(patientId);
+
     const { data, errors } = parse<[string, string, string]>(csvContent, {
       skipEmptyLines: true,
       header: false,
-      // Keep raw values to handle dates properly
       transform: (value) => value.trim(),
     });
 
-    // Skip header row
     const dataRows = data.slice(1);
     console.log(`Starting processing of ${dataRows.length} rows...`);
     const failedRows: string[] = [];
     let successCount = 0;
 
-    // Log any parsing errors
     if (errors.length > 0) {
       console.error("CSV parsing errors:", errors);
       for (const error of errors) {
@@ -316,7 +612,6 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
       }
     }
 
-    // First, parse all rows and group by minute
     interface ParsedRow {
       originalRow: string[];
       date: Date;
@@ -329,7 +624,6 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
       try {
         const [timeStr, durationStr, notes] = row;
 
-        // Parse the date string to Date object, assuming Pacific time
         const date = new Date(timeStr);
         if (Number.isNaN(date.getTime())) {
           console.error(
@@ -339,7 +633,6 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
           continue;
         }
 
-        // Handle empty duration
         if (!durationStr?.trim()) {
           console.error(`Empty duration in row: ${row.join(",")}`);
           failedRows.push(`Empty duration: ${row.join(",")}`);
@@ -371,13 +664,11 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
       }
     }
 
-    // Sort rows by date
     parsedRows.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // Group by minute
     const minuteGroups = new Map<string, ParsedRow[]>();
     for (const row of parsedRows) {
-      const minuteKey = row.date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+      const minuteKey = row.date.toISOString().slice(0, 16);
       if (!minuteGroups.has(minuteKey)) {
         minuteGroups.set(minuteKey, []);
       }
@@ -387,19 +678,17 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
       }
     }
 
-    // Process rows in batches of 25 (DynamoDB BatchWrite limit)
     const BATCH_SIZE = 25;
     const batches: Seizure[][] = [];
     const currentBatch: Seizure[] = [];
 
-    // Create seizures with adjusted seconds and convert to UTC
     for (const [, rows] of minuteGroups) {
       rows.forEach((row, index) => {
         const adjustedDate = new Date(row.date);
-        adjustedDate.setSeconds(index); // Add sequential seconds
+        adjustedDate.setSeconds(index);
 
         const seizure: Seizure = {
-          patient: "kat",
+          patient: patientId,
           date: pacificToUtcTimestamp(adjustedDate),
           duration: row.duration,
           notes: row.notes,
@@ -407,7 +696,6 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
 
         currentBatch.push(seizure);
 
-        // When we reach BATCH_SIZE, create a new batch
         if (currentBatch.length === BATCH_SIZE) {
           batches.push([...currentBatch]);
           currentBatch.length = 0;
@@ -415,12 +703,10 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
       });
     }
 
-    // Don't forget the last partial batch
     if (currentBatch.length > 0) {
       batches.push([...currentBatch]);
     }
 
-    // Process all batches
     for (const batch of batches) {
       try {
         const command = new BatchWriteCommand({
@@ -435,13 +721,11 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
 
         const result = await docClient.send(command);
 
-        // Handle unprocessed items
         if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
           console.error(
             "Error: Some items were not processed by DynamoDB:",
             JSON.stringify(result.UnprocessedItems[SEIZURES_TABLE], null, 2),
           );
-          // Add unprocessed items to failedRows
           for (const item of result.UnprocessedItems[SEIZURES_TABLE]) {
             if (item.PutRequest?.Item) {
               const seizure = item.PutRequest.Item;
@@ -460,27 +744,10 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
         }
       } catch (error) {
         console.error("Error processing batch in DynamoDB:", error);
-        if (error instanceof Error) {
-          console.error("DynamoDB Error details:", {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-            // @ts-ignore - DynamoDB errors often have a code property
-            code: error.code,
-            // @ts-ignore - DynamoDB errors often have a statusCode property
-            statusCode: error.statusCode,
-            // @ts-ignore - Capture any additional properties
-            details: error,
-          });
-        }
-        // Add all items in the failed batch to failedRows with more context
         for (const seizure of batch) {
           const errorDetails =
             error instanceof Error
-              ? `${error.name}: ${error.message}${
-                  // @ts-ignore - DynamoDB errors often have these properties
-                  error.code ? ` (Code: ${error.code})` : ""
-                }`
+              ? `${error.name}: ${error.message}`
               : "Unknown error";
           failedRows.push(
             `DynamoDB batch error (${errorDetails}): date=${seizure.date}, duration=${seizure.duration}, notes=${seizure.notes}`,
@@ -490,6 +757,7 @@ export async function uploadSeizuresFromCSV(csvContent: string) {
     }
 
     revalidatePath("/");
+    revalidatePath("/graphs");
     return {
       success: true,
       totalRows: dataRows.length,
@@ -507,6 +775,8 @@ export async function listMedicationChanges(
   fromDate?: number,
 ) {
   try {
+    await assertOwnsPatient(patientId);
+
     const command = new QueryCommand({
       TableName: MEDICATION_CHANGES_TABLE,
       KeyConditionExpression: fromDate
@@ -537,6 +807,8 @@ export async function createMedicationChange(
   medicationChange: MedicationChange,
 ) {
   try {
+    await assertOwnsPatient(medicationChange.id);
+
     const command = new PutCommand({
       TableName: MEDICATION_CHANGES_TABLE,
       Item: medicationChange,
@@ -552,16 +824,19 @@ export async function createMedicationChange(
 
 export async function deleteMedicationChange(patientId: string, date: number) {
   try {
+    await assertOwnsPatient(patientId);
+
     const command = new DeleteCommand({
       TableName: MEDICATION_CHANGES_TABLE,
       Key: {
         id: patientId,
-        date: date,
+        date,
       },
     });
 
     await docClient.send(command);
     revalidatePath("/");
+    revalidatePath("/graphs");
     return { success: true };
   } catch (error) {
     console.error("Error deleting medication change:", error);
@@ -569,61 +844,36 @@ export async function deleteMedicationChange(patientId: string, date: number) {
   }
 }
 
-export async function deleteSeizure(date: number) {
+export async function deleteSeizure(patientId: string, date: number) {
   try {
-    // First get the seizure details
+    await assertOwnsPatient(patientId);
+
     const getCommand = new GetCommand({
       TableName: SEIZURES_TABLE,
       Key: {
-        patient: "kat",
+        patient: patientId,
         date,
       },
     });
 
     const response = await docClient.send(getCommand);
-    const seizure = response.Item as Seizure;
+    const seizure = response.Item as Seizure | undefined;
 
     if (!seizure) {
       return { error: "Seizure not found" };
     }
 
-    // Check settings and call webhook if enabled
-    const settings = await getSettings();
-    if (settings.enableLatenode) {
-      if (DEBUG_DELETE) {
-        console.log(
-          `Attempting to delete seizure from Latenode: date=${new Date(seizure.date * 1000).toISOString()}, duration=${seizure.duration}, notes=${seizure.notes || ""}`,
-        );
-      }
-      await deleteFromLatenode(
-        new Date(seizure.date * 1000),
-        seizure.duration,
-        seizure.notes || "",
-      );
-    }
-
-    if (DEBUG_DELETE) {
-      console.log("DEBUG_DELETE Would delete from DynamoDB:", {
-        patient: "kat",
+    const deleteCommand = new DeleteCommand({
+      TableName: SEIZURES_TABLE,
+      Key: {
+        patient: patientId,
         date,
-        duration: seizure.duration,
-        notes: seizure.notes,
-      });
-    }
+      },
+    });
 
-    if (!SKIP_DELETE_WRITES) {
-      const deleteCommand = new DeleteCommand({
-        TableName: SEIZURES_TABLE,
-        Key: {
-          patient: "kat",
-          date,
-        },
-      });
-
-      await docClient.send(deleteCommand);
-    }
-
+    await docClient.send(deleteCommand);
     revalidatePath("/");
+    revalidatePath("/graphs");
     return { success: true };
   } catch (error) {
     console.error("Error deleting seizure:", error);
@@ -631,150 +881,26 @@ export async function deleteSeizure(date: number) {
   }
 }
 
-export async function importSeizuresFromSheet() {
-  try {
-    console.log("BENBEN Starting sheet import...");
-    const response = await axios.get(LATENODE_SEIZURE_API);
-    const rows = response.data as [string, string, string][];
+// ---------------------------------------------------------------------------
+// Script helpers
+// ---------------------------------------------------------------------------
 
-    // Skip header row
-    const dataRows = rows.slice(1);
-    console.log(`BENBEN Processing ${dataRows.length} rows from sheet...`);
+export async function createDefaultPatientForUser(
+  userId: string,
+  name: string,
+) {
+  const patient: Patient = {
+    id: "kat",
+    name,
+    ownerId: userId,
+    allowedUserIds: [],
+    createdAt: Date.now(),
+  };
 
-    const failedRows: string[] = [];
-    let successCount = 0;
+  const command = new PutCommand({
+    TableName: PATIENTS_TABLE,
+    Item: patient,
+  });
 
-    // First, parse all rows and group by minute to avoid timestamp collisions
-    interface ParsedRow {
-      originalRow: string[];
-      date: Date;
-      duration: number;
-      notes: string;
-    }
-
-    const parsedRows: ParsedRow[] = [];
-    const minuteGroups = new Map<string, ParsedRow[]>();
-
-    for (const row of dataRows) {
-      const [dateStr, durationStr, noteStr] = row;
-      const parsedDate = parseSheetDate(dateStr);
-
-      if (!parsedDate) {
-        failedRows.push(`Failed to parse date: ${dateStr}`);
-        continue;
-      }
-
-      const duration = Number(durationStr);
-      if (Number.isNaN(duration)) {
-        failedRows.push(`Invalid duration: ${durationStr}`);
-        continue;
-      }
-
-      const parsedRow: ParsedRow = {
-        originalRow: row,
-        date: parsedDate,
-        duration,
-        notes: cleanNote(noteStr) || "SheetImport",
-      };
-
-      parsedRows.push(parsedRow);
-    }
-
-    // Group by minute to avoid timestamp collisions
-    for (const row of parsedRows) {
-      const minuteKey = row.date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
-      if (!minuteGroups.has(minuteKey)) {
-        minuteGroups.set(minuteKey, []);
-      }
-      const group = minuteGroups.get(minuteKey);
-      if (group) {
-        group.push(row);
-      }
-    }
-
-    // Process rows in batches of 25 (DynamoDB BatchWrite limit)
-    const BATCH_SIZE = 25;
-    const batches: Seizure[][] = [];
-    const currentBatch: Seizure[] = [];
-
-    // Create seizures with adjusted seconds and convert to UTC
-    for (const [, rows] of minuteGroups) {
-      rows.forEach((row, index) => {
-        const adjustedDate = new Date(row.date);
-        adjustedDate.setSeconds(index); // Add sequential seconds
-
-        const seizure: Seizure = {
-          patient: "kat",
-          date: pacificToUtcTimestamp(adjustedDate),
-          duration: row.duration,
-          notes: row.notes,
-        };
-
-        currentBatch.push(seizure);
-
-        // When we reach BATCH_SIZE, create a new batch
-        if (currentBatch.length === BATCH_SIZE) {
-          batches.push([...currentBatch]);
-          currentBatch.length = 0;
-        }
-      });
-    }
-
-    // Don't forget the last partial batch
-    if (currentBatch.length > 0) {
-      batches.push([...currentBatch]);
-    }
-
-    // Process each batch
-    for (const batch of batches) {
-      try {
-        const batchCommand = new BatchWriteCommand({
-          RequestItems: {
-            [SEIZURES_TABLE]: batch.map((seizure) => ({
-              PutRequest: {
-                Item: seizure,
-              },
-            })),
-          },
-        });
-
-        const result = await docClient.send(batchCommand);
-
-        // Handle unprocessed items
-        if (result.UnprocessedItems?.[SEIZURES_TABLE]?.length) {
-          console.error(
-            "BENBEN Error: Some items were not processed:",
-            result.UnprocessedItems[SEIZURES_TABLE],
-          );
-          failedRows.push(
-            ...result.UnprocessedItems[SEIZURES_TABLE].map(
-              (item) => `Failed to process item: ${JSON.stringify(item)}`,
-            ),
-          );
-        } else {
-          successCount += batch.length;
-          if (successCount % 500 === 0 || successCount === parsedRows.length) {
-            console.log(
-              `BENBEN Imported ${successCount} of ${parsedRows.length} seizures...`,
-            );
-          }
-        }
-      } catch (error) {
-        console.error("BENBEN Error processing import batch:", error);
-        throw error;
-      }
-    }
-
-    console.log(`BENBEN Import complete. ${successCount} seizures imported.`);
-    revalidatePath("/");
-    return {
-      success: true,
-      successCount,
-      totalRows: dataRows.length,
-      failedRows: failedRows.length > 0 ? failedRows : undefined,
-    };
-  } catch (error) {
-    console.error("BENBEN Error importing seizures from sheet:", error);
-    return { error: "Failed to import seizures from sheet" };
-  }
+  await docClient.send(command);
 }

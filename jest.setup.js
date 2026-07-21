@@ -1,2 +1,4 @@
-// This file is used for any global setup needed for Jest tests
-// For now, we don't need any setup, but we'll keep this file for future use
+process.env.DYNAMODB_SEIZURES_TABLE = "seizures";
+process.env.DYNAMODB_PATIENTS_TABLE = "patients";
+process.env.DYNAMODB_SETTINGS_TABLE = "settings";
+process.env.DYNAMODB_MEDICATION_CHANGES_TABLE = "medication-changes";
